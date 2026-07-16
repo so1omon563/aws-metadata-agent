@@ -41,6 +41,27 @@ sed_replacement_escape() {
   printf '%s' "$1" | sed 's/[\\&|]/\\&/g'
 }
 
+find_systemd_socket_proxyd() {
+  local candidate
+
+  candidate=$(command -v systemd-socket-proxyd || true)
+  if [[ -n $candidate ]]; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+
+  for candidate in \
+    /usr/lib/systemd/systemd-socket-proxyd \
+    /lib/systemd/systemd-socket-proxyd; do
+    if [[ -x $candidate ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 usage() {
   cat <<'EOF'
 Usage: ./install.sh [--user USER] [--aws-runas PATH]
@@ -276,7 +297,7 @@ case $(uname -s) in
     fi
     ;;
   Linux)
-    proxy=$(command -v systemd-socket-proxyd || true)
+    proxy=$(find_systemd_socket_proxyd || true)
     if [[ -z $proxy ]]; then
       printf '%s\n' 'systemd-socket-proxyd is required but was not found.' >&2
       exit 2
