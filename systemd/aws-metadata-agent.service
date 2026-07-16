@@ -1,0 +1,13 @@
+[Unit]
+Description=aws-runas EC2 metadata credential broker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/libexec/aws-metadata-agent/aws-metadata-server
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

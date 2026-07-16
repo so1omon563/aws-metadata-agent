@@ -1,0 +1,12 @@
+[Unit]
+Description=Local EC2 metadata link-local address
+Before=aws-metadata-agent.socket
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/libexec/aws-metadata-agent/aws-metadata-network setup
+ExecStop=/usr/local/libexec/aws-metadata-agent/aws-metadata-network cleanup
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+
+set -eu
+
+readonly ADDRESS=169.254.169.254
+readonly RUNTIME_DIR=/var/run/aws-metadata-agent
+readonly ALIAS_MARKER=$RUNTIME_DIR/lo0-alias-created
+readonly PROXY_LABEL=com.github.so1omon563.aws-metadata-agent.proxy
+readonly PROXY_PLIST='/Library/Application Support/aws-metadata-agent/com.github.so1omon563.aws-metadata-agent.proxy.plist'
+
+if [[ $(uname -s) != Darwin || $EUID -ne 0 ]]; then
+  printf '%s\n' 'aws-metadata-forwarder must run as root on macOS.' >&2
+  exit 1
+fi
+
+case ${1:-setup} in
+  setup)
+    if [[ ! -r $PROXY_PLIST ]]; then
+      printf 'Socket proxy definition is not readable: %s\n' "$PROXY_PLIST" >&2
+      exit 1
+    fi
+
+    install -d -o root -g wheel -m 0755 "$RUNTIME_DIR"
+    if ! /sbin/ifconfig lo0 inet | awk -v address="$ADDRESS" \
+      '$1 == "inet" && $2 == address { found = 1 } END { exit !found }'; then
+      /sbin/ifconfig lo0 alias "$ADDRESS" 255.255.255.255
+      : >"$ALIAS_MARKER"
+    fi
+
+    /bin/launchctl bootout "system/$PROXY_LABEL" >/dev/null 2>&1 || true
+    bootstrap_output=''
+    for _ in {1..20}; do
+      if bootstrap_output=$(/bin/launchctl bootstrap system "$PROXY_PLIST" 2>&1); then
+        exit 0
+      fi
+      sleep 0.1
+    done
+    printf 'Unable to bootstrap launchd service %s:\n%s\n' \
+      "$PROXY_LABEL" "$bootstrap_output" >&2
+    exit 1
+    ;;
+  cleanup)
+    /bin/launchctl bootout "system/$PROXY_LABEL" >/dev/null 2>&1 || true
+    if [[ -f $ALIAS_MARKER ]]; then
+      /sbin/ifconfig lo0 -alias "$ADDRESS" >/dev/null 2>&1 || true
+      rm -f "$ALIAS_MARKER"
+    fi
+    ;;
+  *)
+    printf 'Usage: %s setup|cleanup\n' "$0" >&2
+    exit 2
+    ;;
+esac

@@ -1,0 +1,366 @@
+#!/usr/bin/env bash
+
+set -u
+set -o pipefail
+
+readonly BASE_URL="${AWS_METADATA_URL:-http://169.254.169.254}"
+readonly DEFAULT_WAIT="${AWS_METADATA_WAIT_SECONDS:-0}"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  aws-metadata use PROFILE [--open|--no-open] [--wait SECONDS] [--json]
+  aws-metadata profile PROFILE [--open|--no-open] [--wait SECONDS] [--json]
+  aws-metadata status [--json]
+  aws-metadata open
+  aws-metadata refresh
+  aws-metadata logs
+  aws-metadata diagnose
+  aws-metadata help
+
+Exit codes for profile:
+  0 ready  2 usage  3 unavailable  4 authentication required
+  5 authentication timeout  6 unexpected HTTP response
+EOF
+}
+
+json_escape() {
+  local value=$1
+  value=${value//\\/\\\\}
+  value=${value//\"/\\\"}
+  value=${value//$'\n'/\\n}
+  value=${value//$'\r'/\\r}
+  value=${value//$'\t'/\\t}
+  printf '%s' "$value"
+}
+
+print_result() {
+  local json=$1
+  local state=$2
+  local message=$3
+  local profile=${4:-}
+
+  if [[ $json == true ]]; then
+    printf '{"state":"%s","message":"%s"' \
+      "$(json_escape "$state")" "$(json_escape "$message")"
+    if [[ -n $profile ]]; then
+      printf ',"profile":"%s"' "$(json_escape "$profile")"
+    fi
+    printf '}\n'
+  else
+    printf '%s\n' "$message"
+  fi
+}
+
+open_browser() {
+  case "$(uname -s)" in
+    Darwin)
+      command open "$BASE_URL"
+      ;;
+    Linux)
+      if command -v xdg-open >/dev/null 2>&1; then
+        command xdg-open "$BASE_URL"
+      elif command -v gio >/dev/null 2>&1; then
+        command gio open "$BASE_URL"
+      else
+        printf 'Open %s in a browser.\n' "$BASE_URL" >&2
+        return 1
+      fi
+      ;;
+    *)
+      printf 'Unsupported operating system. Open %s manually.\n' "$BASE_URL" >&2
+      return 1
+      ;;
+  esac
+}
+
+http_request() {
+  local method=$1
+  local path=$2
+  local data=${3:-}
+  local output_file=$4
+  local status
+  local curl_args=(
+    --silent
+    --show-error
+    --noproxy '*'
+    --connect-timeout "${AWS_METADATA_CONNECT_TIMEOUT:-2}"
+    --max-time "${AWS_METADATA_REQUEST_TIMEOUT:-15}"
+    --output "$output_file"
+    --write-out '%{http_code}'
+    --request "$method"
+  )
+
+  if [[ -n $data ]]; then
+    curl_args+=(--header 'Content-Type: application/x-www-form-urlencoded' --data-binary "$data")
+  fi
+
+  status=$(command curl "${curl_args[@]}" "${BASE_URL}${path}") || {
+    printf '000'
+    return 0
+  }
+  printf '%s' "$status"
+}
+
+select_profile_once() {
+  local profile=$1
+  local output_file=$2
+  http_request POST /profile "$profile" "$output_file"
+}
+
+profile_command() (
+  local interaction_mode=$1
+  shift
+  local profile=${1:-}
+  local browser=false
+  local json=false
+  local wait_seconds=$DEFAULT_WAIT
+  local status body_file started now
+
+  if [[ $interaction_mode == interactive ]]; then
+    browser=true
+    wait_seconds=${AWS_METADATA_WAIT_SECONDS:-300}
+  fi
+
+  if [[ -z $profile || $profile == --* ]]; then
+    printf 'A profile name is required.\n' >&2
+    usage >&2
+    return 2
+  fi
+  shift
+
+  while (($#)); do
+    case $1 in
+      --open) browser=true ;;
+      --no-open) browser=false ;;
+      --json) json=true ;;
+      --wait)
+        shift
+        if (($# == 0)) || [[ ! $1 =~ ^[0-9]+$ ]]; then
+          printf '%s\n' '--wait requires a non-negative integer.' >&2
+          return 2
+        fi
+        wait_seconds=$1
+        ;;
+      *)
+        printf 'Unknown profile option: %s\n' "$1" >&2
+        return 2
+        ;;
+    esac
+    shift
+  done
+
+  body_file=$(mktemp "${TMPDIR:-/tmp}/aws-metadata.XXXXXX") || return 6
+  trap 'rm -f "$body_file"' EXIT
+
+  status=$(select_profile_once "$profile" "$body_file")
+  case $status in
+    200|204)
+      print_result "$json" ready "AWS metadata profile set to $profile." "$profile"
+      return 0
+      ;;
+    000)
+      print_result "$json" unavailable \
+        "AWS metadata service is unavailable at $BASE_URL." "$profile"
+      return 3
+      ;;
+    401) ;;
+    *)
+      print_result "$json" error \
+        "AWS metadata service returned HTTP $status while selecting $profile." "$profile"
+      return 6
+      ;;
+  esac
+
+  if [[ $browser != true ]]; then
+    print_result "$json" authentication_required \
+      "Authentication is required for $profile. Open $BASE_URL." "$profile"
+    return 4
+  fi
+
+  open_browser || true
+  if ((wait_seconds == 0)); then
+    print_result "$json" authentication_required \
+      "Authentication is required for $profile; the browser interface was opened." "$profile"
+    return 4
+  fi
+
+  started=$(date +%s)
+  while :; do
+    sleep 2
+    status=$(select_profile_once "$profile" "$body_file")
+    case $status in
+      200|204)
+        print_result "$json" ready "AWS metadata profile set to $profile." "$profile"
+        return 0
+        ;;
+      000)
+        print_result "$json" unavailable \
+          "AWS metadata service became unavailable at $BASE_URL." "$profile"
+        return 3
+        ;;
+      401) ;;
+      *)
+        print_result "$json" error \
+          "AWS metadata service returned HTTP $status while waiting for $profile." "$profile"
+        return 6
+        ;;
+    esac
+
+    now=$(date +%s)
+    if ((now - started >= wait_seconds)); then
+      print_result "$json" timeout \
+        "Timed out waiting for authentication for $profile." "$profile"
+      return 5
+    fi
+  done
+)
+
+status_command() (
+  local json=false
+  local body_file status body
+
+  if [[ ${1:-} == --json ]]; then
+    json=true
+    shift
+  fi
+  if (($#)); then
+    printf 'Unknown status option: %s\n' "$1" >&2
+    return 2
+  fi
+
+  body_file=$(mktemp "${TMPDIR:-/tmp}/aws-metadata.XXXXXX") || return 6
+  trap 'rm -f "$body_file"' EXIT
+  status=$(http_request GET /profile '' "$body_file")
+  body=$(<"$body_file")
+
+  case $status in
+    200)
+      if [[ $json == true ]]; then
+        printf '{"state":"running","endpoint":"%s","profile":%s}\n' \
+          "$(json_escape "$BASE_URL")" "${body:-null}"
+      else
+        printf 'AWS metadata service is running at %s.\n' "$BASE_URL"
+        printf 'Active profile: %s\n' "${body:-unknown}"
+      fi
+      ;;
+    500)
+      if [[ $body == 'profile not set' ]]; then
+        if [[ $json == true ]]; then
+          printf '{"state":"running","endpoint":"%s","profile":null}\n' \
+            "$(json_escape "$BASE_URL")"
+        else
+          printf 'AWS metadata service is running at %s.\n' "$BASE_URL"
+          printf '%s\n' 'No profile is selected.'
+        fi
+      else
+        print_result "$json" error \
+          "AWS metadata service returned HTTP $status."
+        return 6
+      fi
+      ;;
+    000)
+      print_result "$json" unavailable \
+        "AWS metadata service is unavailable at $BASE_URL."
+      return 3
+      ;;
+    *)
+      print_result "$json" error \
+        "AWS metadata service returned HTTP $status."
+      return 6
+      ;;
+  esac
+)
+
+logs_command() {
+  case "$(uname -s)" in
+    Darwin)
+      command tail -n 100 -f "$HOME/Library/Logs/aws-metadata-agent.log"
+      ;;
+    Linux)
+      command journalctl --user-unit aws-metadata-agent.service --lines 100 --follow
+      ;;
+    *)
+      printf 'Unsupported operating system.\n' >&2
+      return 2
+      ;;
+  esac
+}
+
+diagnose_command() {
+  local status=0
+
+  printf 'Platform: %s\n' "$(uname -s)"
+  printf 'Configured endpoint: %s\n' "$BASE_URL"
+  if command -v aws-runas >/dev/null 2>&1; then
+    printf 'aws-runas: %s\n' "$(command -v aws-runas)"
+    aws-runas --version 2>&1 | sed 's/^/  /'
+  else
+    printf '%s\n' 'aws-runas: not found in PATH'
+    status=1
+  fi
+
+  if status_command >/dev/null 2>&1; then
+    printf '%s\n' 'Metadata HTTP API: reachable'
+  else
+    printf '%s\n' 'Metadata HTTP API: unreachable'
+    status=1
+  fi
+
+  case $(uname -s) in
+    Darwin)
+      if /sbin/ifconfig lo0 inet 2>/dev/null | grep -Fq '169.254.169.254'; then
+        printf '%s\n' 'Link-local address: present on lo0'
+      else
+        printf '%s\n' 'Link-local address: missing from lo0'
+        status=1
+      fi
+      if launchctl print \
+        "gui/$(id -u)/com.github.so1omon563.aws-metadata-agent.broker" \
+        >/dev/null 2>&1; then
+        printf '%s\n' 'User broker service: loaded'
+      else
+          printf '%s\n' 'User broker service: not loaded'
+          status=1
+      fi
+      ;;
+    Linux)
+      if command -v ip >/dev/null 2>&1 && \
+         ip -4 address show dev lo 2>/dev/null | grep -Fq '169.254.169.254/32'; then
+        printf '%s\n' 'Link-local address: present on lo'
+      else
+        printf '%s\n' 'Link-local address: missing from lo'
+        status=1
+      fi
+      if systemctl --user is-active aws-metadata-agent.service >/dev/null 2>&1; then
+        printf '%s\n' 'User broker service: active'
+      else
+          printf '%s\n' 'User broker service: inactive'
+          status=1
+      fi
+      ;;
+  esac
+  return "$status"
+}
+
+main() {
+  local command_name=${1:-help}
+  if (($#)); then shift; fi
+
+  case $command_name in
+    use) profile_command interactive "$@" ;;
+    profile) profile_command automation "$@" ;;
+    status) status_command "$@" ;;
+    open|refresh) open_browser ;;
+    logs) logs_command "$@" ;;
+    diagnose|doctor) diagnose_command "$@" ;;
+    help|-h|--help) usage ;;
+    *)
+      printf 'Unknown command: %s\n' "$command_name" >&2
+      usage >&2
+      return 2
+      ;;
+  esac
+}
+
+main "$@"

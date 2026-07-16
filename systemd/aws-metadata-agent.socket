@@ -1,0 +1,11 @@
+[Unit]
+Description=Local EC2 metadata forwarding socket
+Requires=aws-metadata-agent-address.service
+After=aws-metadata-agent-address.service
+
+[Socket]
+ListenStream=169.254.169.254:80
+NoDelay=true
+
+[Install]
+WantedBy=sockets.target

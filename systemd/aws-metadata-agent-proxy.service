@@ -1,0 +1,15 @@
+[Unit]
+Description=Forward EC2 metadata traffic to the user credential broker
+Requires=aws-metadata-agent.socket
+After=aws-metadata-agent.socket
+
+[Service]
+ExecStart=__SYSTEMD_SOCKET_PROXYD__ 127.0.0.1:18080
+DynamicUser=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+NoNewPrivileges=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_UNIX

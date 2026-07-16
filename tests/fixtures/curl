@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+
+set -u
+
+output_file=''
+method=GET
+
+while (($#)); do
+  case $1 in
+    --output)
+      shift
+      output_file=$1
+      ;;
+    --request)
+      shift
+      method=$1
+      ;;
+    --connect-timeout|--max-time|--write-out|--header|--data-binary)
+      shift
+      ;;
+    --silent|--show-error) ;;
+    http://*) ;;
+  esac
+  shift
+done
+
+if [[ ${MOCK_CURL_STATUS:-200} == 000 ]]; then
+  exit 7
+fi
+
+if [[ -n $output_file ]]; then
+  if [[ $method == GET ]]; then
+    if [[ -n ${MOCK_CURL_BODY:-} ]]; then
+      printf '%s' "$MOCK_CURL_BODY" >"$output_file"
+    else
+      printf '%s' '{"name":"test-profile"}' >"$output_file"
+    fi
+  else
+    printf '%s' "${MOCK_CURL_BODY:-}" >"$output_file"
+  fi
+fi
+
+printf '%s' "${MOCK_CURL_STATUS:-200}"

@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+
+set -eu
+
+readonly ADDRESS=169.254.169.254
+readonly RUNTIME_DIR=/run/aws-metadata-agent
+readonly ADDRESS_MARKER=$RUNTIME_DIR/lo-address-created
+
+if [[ $(uname -s) != Linux || $EUID -ne 0 ]]; then
+  printf '%s\n' 'aws-metadata-network must run as root on Linux.' >&2
+  exit 1
+fi
+
+ip_command=$(command -v ip || true)
+if [[ -z $ip_command ]]; then
+  printf '%s\n' 'The Linux ip command is required.' >&2
+  exit 1
+fi
+
+case ${1:-} in
+  setup)
+    install -d -o root -g root -m 0755 "$RUNTIME_DIR"
+    if ! "$ip_command" -4 address show dev lo | grep -Fq "$ADDRESS/32"; then
+      "$ip_command" address add "$ADDRESS/32" dev lo
+      : >"$ADDRESS_MARKER"
+    fi
+    ;;
+  cleanup)
+    if [[ -f $ADDRESS_MARKER ]]; then
+      "$ip_command" address del "$ADDRESS/32" dev lo 2>/dev/null || true
+      rm -f "$ADDRESS_MARKER"
+    fi
+    ;;
+  *)
+    printf 'Usage: %s setup|cleanup\n' "$0" >&2
+    exit 2
+    ;;
+esac

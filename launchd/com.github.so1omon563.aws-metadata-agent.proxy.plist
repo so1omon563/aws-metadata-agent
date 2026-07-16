@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.github.so1omon563.aws-metadata-agent.proxy</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/nc</string>
+    <string>-n</string>
+    <string>127.0.0.1</string>
+    <string>18080</string>
+  </array>
+  <key>UserName</key>
+  <string>nobody</string>
+  <key>inetdCompatibility</key>
+  <dict>
+    <key>Wait</key>
+    <false/>
+  </dict>
+  <key>Sockets</key>
+  <dict>
+    <key>Listener</key>
+    <dict>
+      <key>SockNodeName</key>
+      <string>169.254.169.254</string>
+      <key>SockServiceName</key>
+      <integer>80</integer>
+      <key>SockFamily</key>
+      <string>IPv4</string>
+      <key>SockType</key>
+      <string>stream</string>
+      <key>SockProtocol</key>
+      <string>TCP</string>
+    </dict>
+  </dict>
+</dict>
+</plist>
