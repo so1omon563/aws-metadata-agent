@@ -29,6 +29,10 @@ have been validated on a representative distribution.
 - `unzip` when using the optional bootstrap command
 - Administrator access during installation
 
+On Linux, the installer finds `systemd-socket-proxyd` in `PATH` or in the
+standard systemd private executable directories used by distributions such as
+Ubuntu.
+
 No terminal multiplexer is required.
 
 ### Installing the upstream dependency

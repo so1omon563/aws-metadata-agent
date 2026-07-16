@@ -67,6 +67,16 @@ assert_contains \
   '__SYSTEMD_SOCKET_PROXYD__ 127.0.0.1:18080'
 # shellcheck disable=SC2016
 assert_contains \
+  "$PROJECT_DIR/install.sh" \
+  'proxy=$(find_systemd_socket_proxyd || true)'
+assert_contains \
+  "$PROJECT_DIR/install.sh" \
+  '/usr/lib/systemd/systemd-socket-proxyd'
+assert_contains \
+  "$PROJECT_DIR/install.sh" \
+  '/lib/systemd/systemd-socket-proxyd'
+# shellcheck disable=SC2016
+assert_contains \
   "$PROJECT_DIR/libexec/aws-metadata-server" \
   '[[ $(id -u) != "$AWS_METADATA_UID" ]]'
 # shellcheck disable=SC2016
