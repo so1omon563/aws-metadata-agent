@@ -1,0 +1,65 @@
+name: Feature Request
+description: Propose an improvement to aws-metadata-agent.
+title: "feature: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please review the README, architecture, and security notes first. The
+        service intentionally exposes one globally active metadata profile to
+        local processes that can reach the endpoint.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I searched the existing issues for related proposals.
+          required: true
+        - label: I reviewed the documented privilege boundary and global-profile limitation.
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the concrete workflow or limitation this proposal addresses.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Explain the desired behavior and user-facing interface.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform scope
+      multiple: true
+      options:
+        - macOS
+        - Linux
+        - Containers
+        - Cross-platform
+    validations:
+      required: true
+
+  - type: textarea
+    id: security
+    attributes:
+      label: Privilege and security impact
+      description: Note any effect on root-owned files, service identities, metadata reachability, profile selection, or credential exposure.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
