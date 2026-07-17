@@ -61,6 +61,28 @@ if [[ $("$CLI" --version) != "$version_output" ]]; then
 fi
 assert_exit 2 "$CLI" version unexpected
 
+setup_help=$(AWS_METADATA_PACKAGE_ROOT="$PROJECT_DIR" "$CLI" setup --help)
+if [[ $setup_help != *'--no-install-cli'* ]]; then
+  printf '%s\n' 'Packaged setup help did not expose the installer contract.' >&2
+  exit 1
+fi
+uninstall_help=$(AWS_METADATA_PACKAGE_ROOT="$PROJECT_DIR" "$CLI" uninstall --help)
+if [[ $uninstall_help != *'Stops and removes aws-metadata-agent services'* ]]; then
+  printf '%s\n' 'Packaged uninstall help did not reach the uninstaller.' >&2
+  exit 1
+fi
+assert_exit 2 env AWS_METADATA_PACKAGE_ROOT= "$CLI" setup --help
+assert_exit 2 env AWS_METADATA_PACKAGE_ROOT= "$CLI" uninstall --help
+assert_exit 2 env \
+  AWS_METADATA_PACKAGE_ROOT="$PROJECT_DIR" AWS_METADATA_PACKAGE_CLI= \
+  "$CLI" setup --aws-runas /bin/true
+assert_exit 2 env \
+  AWS_METADATA_PACKAGE_ROOT="$PROJECT_DIR" AWS_METADATA_PACKAGE_CLI= \
+  "$CLI" uninstall
+assert_exit 2 "$PROJECT_DIR/install.sh" --package-cli relative/path
+assert_exit 2 "$PROJECT_DIR/uninstall.sh" unexpected
+assert_exit 2 "$PROJECT_DIR/uninstall.sh" --package-cli relative/path
+
 bootstrap_output=$("$PROJECT_DIR/bootstrap.sh" --dry-run)
 if [[ $bootstrap_output != *'/mmmorris1975/aws-runas/releases/download/'* ]]; then
   printf '%s\n' 'Bootstrap dry run did not reference the upstream repository.' >&2

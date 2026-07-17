@@ -3,19 +3,73 @@
 set -eu
 
 readonly CONFIG_FILE=/etc/aws-metadata-agent/config
+package_cli=''
+
+usage() {
+  cat <<'EOF'
+Usage: ./uninstall.sh [--package-cli PATH]
+
+Stops and removes aws-metadata-agent services, root-owned executables, and
+installer state. User-owned AWS configuration and aws-runas caches are kept.
+EOF
+}
+
+while (($#)); do
+  case $1 in
+    --package-cli)
+      shift
+      package_cli=${1:?--package-cli requires a value}
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      printf 'Unknown option: %s\n' "$1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
+
+if [[ -n $package_cli && $package_cli != /* ]]; then
+  printf '%s\n' '--package-cli requires an absolute path.' >&2
+  exit 2
+fi
+if [[ -n $package_cli && ! -x $package_cli ]]; then
+  printf 'The package-managed command is not executable: %s\n' \
+    "$package_cli" >&2
+  exit 2
+fi
 
 if ((EUID != 0)); then
-  exec sudo "$0" "$@"
+  sudo_args=("$0")
+  if [[ -n $package_cli ]]; then
+    sudo_args+=(--package-cli "$package_cli")
+  fi
+  exec sudo "${sudo_args[@]}"
 fi
 
 AWS_METADATA_USER=${SUDO_USER:-}
 AWS_METADATA_UID=''
 AWS_METADATA_HOME=''
 AWS_METADATA_LINGER_WAS_ENABLED=''
+AWS_METADATA_CLI_INSTALLED=''
 if [[ -r $CONFIG_FILE ]]; then
   # Root-owned installer state; contains paths and account names, not secrets.
   # shellcheck disable=SC1090
   source "$CONFIG_FILE"
+fi
+if [[ -z ${AWS_METADATA_CLI_INSTALLED:-} ]]; then
+  if [[ -r $CONFIG_FILE ]]; then
+    # v0.1.0 source installations predate the ownership marker.
+    AWS_METADATA_CLI_INSTALLED=yes
+  elif [[ -n $package_cli ]]; then
+    AWS_METADATA_CLI_INSTALLED=no
+  else
+    AWS_METADATA_CLI_INSTALLED=yes
+  fi
 fi
 
 case $(uname -s) in
@@ -82,7 +136,9 @@ case $(uname -s) in
     ;;
 esac
 
-rm -f /usr/local/bin/aws-metadata
+if [[ ${AWS_METADATA_CLI_INSTALLED:-yes} == yes ]]; then
+  rm -f /usr/local/bin/aws-metadata
+fi
 rm -f /usr/local/bin/runas.sh
 rm -rf /usr/local/libexec/aws-metadata-agent
 rm -rf /etc/aws-metadata-agent

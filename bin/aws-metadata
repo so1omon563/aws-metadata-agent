@@ -6,6 +6,8 @@ set -o pipefail
 readonly BASE_URL="${AWS_METADATA_URL:-http://169.254.169.254}"
 readonly DEFAULT_WAIT="${AWS_METADATA_WAIT_SECONDS:-0}"
 readonly VERSION_FILE="${AWS_METADATA_VERSION_FILE:-/usr/local/libexec/aws-metadata-agent/VERSION}"
+readonly PACKAGE_ROOT="${AWS_METADATA_PACKAGE_ROOT:-}"
+readonly PACKAGE_CLI="${AWS_METADATA_PACKAGE_CLI:-}"
 
 usage() {
   cat <<'EOF'
@@ -18,6 +20,8 @@ Usage:
   aws-metadata logs
   aws-metadata diagnose
   aws-metadata version
+  aws-metadata setup [INSTALLER OPTIONS]
+  aws-metadata uninstall [--help]
   aws-metadata help
 
 Exit codes for profile:
@@ -36,6 +40,76 @@ version_command() {
     return 1
   fi
   command cat "$VERSION_FILE"
+}
+
+package_script() {
+  local script_name=$1
+  local script_path
+
+  if [[ -z $PACKAGE_ROOT ]]; then
+    printf '%s\n' \
+      'This command is available from the Homebrew-packaged installation.' >&2
+    printf 'Source users should run ./%s from a release checkout.\n' \
+      "$script_name" >&2
+    return 2
+  fi
+  script_path=$PACKAGE_ROOT/$script_name
+  if [[ ! -x $script_path ]]; then
+    printf 'The packaged %s was not found at %s.\n' \
+      "$script_name" "$script_path" >&2
+    return 2
+  fi
+  printf '%s\n' "$script_path"
+}
+
+has_aws_runas_argument() {
+  while (($#)); do
+    if [[ $1 == --aws-runas ]]; then
+      return 0
+    fi
+    shift
+  done
+  return 1
+}
+
+validate_package_cli() {
+  if [[ $PACKAGE_CLI != /* || ! -x $PACKAGE_CLI ]]; then
+    printf '%s\n' \
+      'The package-managed aws-metadata command path is missing or invalid.' >&2
+    return 2
+  fi
+}
+
+setup_command() {
+  local installer bootstrap
+
+  installer=$(package_script install.sh) || return
+  if [[ ${1:-} == -h || ${1:-} == --help ]]; then
+    exec "$installer" "$@"
+  fi
+  validate_package_cli || return
+
+  if ! has_aws_runas_argument "$@" && \
+     ! command -v aws-runas >/dev/null 2>&1 && \
+     [[ ! -x ${HOME:-}/.local/bin/aws-runas ]]; then
+    bootstrap=$(package_script bootstrap.sh) || return
+    printf '%s\n' \
+      'aws-runas was not found; downloading the verified upstream release.'
+    "$bootstrap" || return
+  fi
+
+  exec "$installer" --package-cli "$PACKAGE_CLI" "$@"
+}
+
+uninstall_command() {
+  local uninstaller
+
+  uninstaller=$(package_script uninstall.sh) || return
+  if [[ ${1:-} == -h || ${1:-} == --help ]]; then
+    exec "$uninstaller" "$@"
+  fi
+  validate_package_cli || return
+  exec "$uninstaller" --package-cli "$PACKAGE_CLI" "$@"
 }
 
 json_escape() {
@@ -369,6 +443,8 @@ main() {
     logs) logs_command "$@" ;;
     diagnose|doctor) diagnose_command "$@" ;;
     version|--version) version_command "$@" ;;
+    setup) setup_command "$@" ;;
+    uninstall) uninstall_command "$@" ;;
     help|-h|--help) usage ;;
     *)
       printf 'Unknown command: %s\n' "$command_name" >&2
