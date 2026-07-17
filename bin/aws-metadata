@@ -167,13 +167,14 @@ http_request() {
   local path=$2
   local data=${3:-}
   local output_file=$4
+  local request_timeout=${5:-${AWS_METADATA_REQUEST_TIMEOUT:-15}}
   local status
   local curl_args=(
     --silent
     --show-error
     --noproxy '*'
     --connect-timeout "${AWS_METADATA_CONNECT_TIMEOUT:-2}"
-    --max-time "${AWS_METADATA_REQUEST_TIMEOUT:-15}"
+    --max-time "$request_timeout"
     --output "$output_file"
     --write-out '%{http_code}'
     --request "$method"
@@ -193,7 +194,8 @@ http_request() {
 select_profile_once() {
   local profile=$1
   local output_file=$2
-  http_request POST /profile "$profile" "$output_file"
+  local request_timeout=${3:-${AWS_METADATA_REQUEST_TIMEOUT:-15}}
+  http_request POST /profile "$profile" "$output_file" "$request_timeout"
 }
 
 profile_command() (
@@ -203,7 +205,7 @@ profile_command() (
   local browser=false
   local json=false
   local wait_seconds=$DEFAULT_WAIT
-  local status body_file started now
+  local status body_file started now request_timeout
 
   if [[ $interaction_mode == interactive ]]; then
     browser=true
@@ -238,10 +240,18 @@ profile_command() (
     shift
   done
 
+  request_timeout=${AWS_METADATA_REQUEST_TIMEOUT:-}
+  if [[ -z $request_timeout ]]; then
+    request_timeout=15
+    if [[ $browser == true ]] && ((wait_seconds > request_timeout)); then
+      request_timeout=$wait_seconds
+    fi
+  fi
+
   body_file=$(mktemp "${TMPDIR:-/tmp}/aws-metadata.XXXXXX") || return 6
   trap 'rm -f "$body_file"' EXIT
 
-  status=$(select_profile_once "$profile" "$body_file")
+  status=$(select_profile_once "$profile" "$body_file" "$request_timeout")
   case $status in
     200|204)
       print_result "$json" ready "AWS metadata profile set to $profile." "$profile"
@@ -276,7 +286,7 @@ profile_command() (
   started=$(date +%s)
   while :; do
     sleep 2
-    status=$(select_profile_once "$profile" "$body_file")
+    status=$(select_profile_once "$profile" "$body_file" "$request_timeout")
     case $status in
       200|204)
         print_result "$json" ready "AWS metadata profile set to $profile." "$profile"

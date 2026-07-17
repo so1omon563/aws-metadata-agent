@@ -223,6 +223,15 @@ required and waits up to 300 seconds by default:
 aws-metadata use my-profile
 ```
 
+If the identity provider requires a longer interaction, such as an expired
+password change or account-recovery step, extend the wait explicitly. The CLI
+keeps the blocking profile request alive for the same window so upstream
+browser authentication is not canceled while the user completes it:
+
+```sh
+aws-metadata use my-profile --wait 600
+```
+
 The lower-level command is automation-safe by default and reports
 authentication as a nonzero exit:
 

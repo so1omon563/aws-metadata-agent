@@ -4,6 +4,7 @@ set -u
 
 output_file=''
 method=GET
+max_time=''
 
 while (($#)); do
   case $1 in
@@ -15,7 +16,11 @@ while (($#)); do
       shift
       method=$1
       ;;
-    --connect-timeout|--max-time|--write-out|--header|--data-binary)
+    --max-time)
+      shift
+      max_time=$1
+      ;;
+    --connect-timeout|--write-out|--header|--data-binary)
       shift
       ;;
     --silent|--show-error) ;;
@@ -23,6 +28,15 @@ while (($#)); do
   esac
   shift
 done
+
+if [[ -n ${MOCK_CURL_MAX_TIME_LOG:-} ]]; then
+  printf '%s\n' "$max_time" >>"$MOCK_CURL_MAX_TIME_LOG"
+fi
+
+if [[ -n ${MOCK_CURL_REQUIRED_TIMEOUT:-} ]] &&
+   ((max_time < MOCK_CURL_REQUIRED_TIMEOUT)); then
+  exit 28
+fi
 
 if [[ ${MOCK_CURL_STATUS:-200} == 000 ]]; then
   exit 7
