@@ -44,6 +44,31 @@ aws-metadata setup --aws-runas /absolute/path/to/aws-runas
 The supported Homebrew host boundary is Apple Silicon macOS 26. Other macOS
 versions and architectures are not part of the current support claim.
 
+## Browser-based authentication permission
+
+The upstream `saml_provider = browser` flow starts and manages a dedicated
+Chrome or Edge session through the Chrome DevTools Protocol. On macOS,
+`aws-runas` may consequently appear under **System Settings → Privacy &
+Security → App Management**.
+
+If macOS prompts for access, or browser authentication cannot start or complete
+while the entry is disabled:
+
+1. Open **System Settings → Privacy & Security → App Management**.
+2. Enable `aws-runas`.
+3. Retry the profile selection or authentication command.
+
+Apple describes App Management as permission for an application to update or
+delete other applications. Grant it only after verifying the upstream
+`aws-runas` binary installed or selected during setup. This permission is
+separate from the administrator access used to install networking and launchd
+services. It is not required merely to trust the tap, install the formula, or
+use profiles that do not invoke the browser provider.
+
+See Apple's
+[Privacy & Security settings reference](https://support.apple.com/guide/mac-help/change-privacy-security-settings-on-mac-mchl211c911f/mac)
+for the operating-system description of App Management.
+
 ## Upgrade
 
 Upgrade the Homebrew payload, then explicitly refresh the root-owned service

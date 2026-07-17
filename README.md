@@ -113,8 +113,16 @@ To use a specific existing binary and skip automatic bootstrap discovery:
 aws-metadata setup --aws-runas /absolute/path/to/aws-runas
 ```
 
+For browser-based authentication on macOS, the upstream `browser` provider
+starts and manages a dedicated Chrome or Edge session. macOS may list
+`aws-runas` under **System Settings → Privacy & Security → App Management**. If
+macOS prompts for access, or the browser authentication session cannot start or
+complete while that entry is disabled, enable `aws-runas` there and retry. This
+permission is separate from `sudo` service setup and is not required merely to
+install the formula.
+
 See [docs/homebrew.md](docs/homebrew.md) for trust, upgrade, rollback,
-uninstall, and recovery instructions.
+uninstall, browser-permission troubleshooting, and recovery instructions.
 
 ### Direct release install
 
