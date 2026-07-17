@@ -10,8 +10,8 @@ through the normal EC2 instance metadata provider chain.
 
 ## Status
 
-The `v0.1.0` support boundary is limited to the two host configurations that
-have passed end-to-end validation:
+The `v0.2.0` support boundary remains limited to the two host configurations
+that have passed end-to-end validation:
 
 - Apple Silicon macOS 26 with `launchd`, tested on macOS 26.5.2 with
   `aws-runas` 3.9.0. Validation covered installation, no-profile startup,
@@ -26,12 +26,12 @@ have passed end-to-end validation:
 
 Other macOS versions and architectures, other Linux distributions and
 architectures, and Linux container-runtime access may work but are not part of
-the `v0.1.0` support claim. The active profile is process state: after a service
+the `v0.2.0` support claim. The active profile is process state: after a service
 restart or reboot, select the profile again before requesting credentials.
 
 ## Requirements
 
-For a supported `v0.1.0` host configuration:
+For a supported host configuration:
 
 - Apple Silicon macOS 26 with `launchd`; or
 - Ubuntu 24.04 LTS ARM64 with systemd
@@ -101,7 +101,27 @@ and verifies a reviewed SHA-256 checksum for each supported completion version.
 It refuses to configure completion for an unreviewed version even if that
 version's binary can be downloaded successfully.
 
-## Install
+## Homebrew install on macOS
+
+Homebrew is the primary installation path on supported macOS hosts:
+
+```sh
+brew trust --tap so1omon563/aws-metadata-agent
+brew tap so1omon563/aws-metadata-agent
+brew install aws-metadata-agent
+aws-metadata setup
+```
+
+The formula installation is unprivileged. The explicit setup command invokes
+the reviewed installer for the link-local address and launchd services. If
+needed, it downloads `aws-runas` directly from the official upstream release
+through the existing checksum-verified bootstrap; the formula does not bundle
+or mirror it.
+
+See [docs/homebrew.md](docs/homebrew.md) for trust, upgrade, rollback,
+uninstall, and recovery instructions.
+
+## Source install
 
 ```sh
 ./install.sh
@@ -195,6 +215,8 @@ aws-metadata status --json
 aws-metadata logs
 aws-metadata diagnose
 aws-metadata version
+aws-metadata setup
+aws-metadata uninstall
 ```
 
 Exit codes used by `profile`:
@@ -249,6 +271,15 @@ selection wins. See [docs/architecture.md](docs/architecture.md) for the
 planned lease/locking design.
 
 ## Uninstall
+
+For a Homebrew installation, remove service state before the formula:
+
+```sh
+aws-metadata uninstall
+brew uninstall aws-metadata-agent
+```
+
+For a source installation:
 
 ```sh
 ./uninstall.sh

@@ -10,6 +10,8 @@ target_home=''
 target_uid=''
 linux_linger_was_enabled=''
 aws_runas=''
+install_cli=true
+package_cli=''
 user_path=${AWS_METADATA_USER_PATH:-$PATH}
 agent_version=''
 readonly CONFIG_SCHEMA_VERSION=1
@@ -68,10 +70,15 @@ find_systemd_socket_proxyd() {
 usage() {
   cat <<'EOF'
 Usage: ./install.sh [--user USER] [--aws-runas PATH]
+                    [--no-install-cli | --package-cli PATH]
 
 Installs a user-owned aws-runas credential broker plus the minimum privileged
 network forwarding needed for the standard 169.254.169.254:80 endpoint.
 Administrator access is required during installation.
+
+  --no-install-cli  Leave command installation to a package manager.
+  --package-cli     Record the package-managed command path and remove a
+                    conflicting CLI left by an earlier source installation.
 EOF
 }
 
@@ -107,6 +114,14 @@ while (($#)); do
       shift
       user_path=${1:?--user-path requires a value}
       ;;
+    --no-install-cli)
+      install_cli=false
+      ;;
+    --package-cli)
+      shift
+      package_cli=${1:?--package-cli requires a value}
+      install_cli=false
+      ;;
     -h|--help)
       usage
       exit 0
@@ -119,6 +134,16 @@ while (($#)); do
   esac
   shift
 done
+
+if [[ -n $package_cli && $package_cli != /* ]]; then
+  printf '%s\n' '--package-cli requires an absolute path.' >&2
+  exit 2
+fi
+if [[ -n $package_cli && ! -x $package_cli ]]; then
+  printf 'The package-managed command is not executable: %s\n' \
+    "$package_cli" >&2
+  exit 2
+fi
 
 if [[ ! -r $PROJECT_DIR/VERSION ]]; then
   printf '%s\n' 'VERSION is missing from the release.' >&2
@@ -179,6 +204,12 @@ if ((EUID != 0)); then
     --aws-runas "$aws_runas"
     --user-path "$user_path"
   )
+  if [[ $install_cli == false && -z $package_cli ]]; then
+    sudo_args+=(--no-install-cli)
+  fi
+  if [[ -n $package_cli ]]; then
+    sudo_args+=(--package-cli "$package_cli")
+  fi
   exec sudo "${sudo_args[@]}"
 fi
 
@@ -219,7 +250,14 @@ target_group=$(id -gn "$target_user")
 install -d -m 0755 /usr/local/bin /usr/local/libexec
 install -d -o root -g "$root_group" -m 0755 \
   "$SERVICE_DIR" /etc/aws-metadata-agent
-install -m 0755 "$PROJECT_DIR/bin/aws-metadata" /usr/local/bin/aws-metadata
+if [[ $install_cli == true ]]; then
+  install -m 0755 "$PROJECT_DIR/bin/aws-metadata" /usr/local/bin/aws-metadata
+elif [[ -n $package_cli && /usr/local/bin/aws-metadata != "$package_cli" ]]; then
+  # A v0.1.0 source installation owned this path but did not record that fact.
+  # Package managers own their command and the privileged service installer
+  # removes only the distinct legacy project path during migration.
+  rm -f /usr/local/bin/aws-metadata
+fi
 # Remove the compatibility shim installed by earlier versions. Personal
 # scripts such as ~/bin/runas.sh are intentionally untouched.
 rm -f /usr/local/bin/runas.sh
@@ -240,6 +278,11 @@ chmod 0644 "$SERVICE_VERSION"
 {
   printf 'AWS_METADATA_AGENT_VERSION=%q\n' "$agent_version"
   printf 'AWS_METADATA_CONFIG_VERSION=%q\n' "$CONFIG_SCHEMA_VERSION"
+  if [[ $install_cli == true ]]; then
+    printf 'AWS_METADATA_CLI_INSTALLED=%q\n' 'yes'
+  else
+    printf 'AWS_METADATA_CLI_INSTALLED=%q\n' 'no'
+  fi
   printf 'AWS_METADATA_USER=%q\n' "$target_user"
   printf 'AWS_METADATA_UID=%q\n' "$target_uid"
   printf 'AWS_METADATA_HOME=%q\n' "$target_home"
@@ -380,12 +423,16 @@ printf 'Version: %s\n' "$agent_version"
 printf '%s\n' 'The credential broker runs as that user; only networking runs as root.'
 printf '%s\n' 'Run: aws-metadata status'
 printf '%s\n' 'Open: http://169.254.169.254'
-case :${user_path}: in
-  *:/usr/local/bin:*) ;;
-  *)
-    printf '%s\n' 'WARNING: /usr/local/bin is not in the user PATH.' >&2
-    printf '%s\n' 'For zsh, add this line to ~/.zprofile:' >&2
-    # shellcheck disable=SC2016
-    printf '%s\n' '  export PATH="/usr/local/bin:$PATH"' >&2
-    ;;
-esac
+if [[ $install_cli == true ]]; then
+  case :${user_path}: in
+    *:/usr/local/bin:*) ;;
+    *)
+      printf '%s\n' 'WARNING: /usr/local/bin is not in the user PATH.' >&2
+      printf '%s\n' 'For zsh, add this line to ~/.zprofile:' >&2
+      # shellcheck disable=SC2016
+      printf '%s\n' '  export PATH="/usr/local/bin:$PATH"' >&2
+      ;;
+  esac
+else
+  printf '%s\n' 'The aws-metadata command remains managed by the package manager.'
+fi

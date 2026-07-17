@@ -5,11 +5,23 @@ All notable changes to this project are documented here. Changes remain under
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-16
+
 ### Added
 
 - A project version source, installed version reporting, and a documented
   upgrade, rollback, configuration-schema, and release policy.
 - A private vulnerability-reporting policy for coordinated disclosure.
+- A package-manager-safe `aws-metadata setup` and `aws-metadata uninstall`
+  interface that keeps Homebrew installation unprivileged and leaves command
+  ownership with Homebrew.
+
+### Supported hosts
+
+- Apple Silicon macOS 26 with `launchd`.
+- Ubuntu 24.04 LTS ARM64 with systemd.
+
+This release does not expand the host support boundary established by v0.1.0.
 
 ## [0.1.0] - 2026-07-16
 
@@ -36,5 +48,6 @@ Other host configurations and Linux container-runtime access remain
 unverified. The metadata endpoint exposes one globally active profile, and the
 active selection must be restored after the broker restarts.
 
-[Unreleased]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/so1omon563/aws-metadata-agent/releases/tag/v0.1.0

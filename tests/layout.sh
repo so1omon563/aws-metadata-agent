@@ -117,6 +117,25 @@ assert_contains \
   'if ((prior_config_version > CONFIG_SCHEMA_VERSION)); then'
 # shellcheck disable=SC2016
 assert_contains \
+  "$PROJECT_DIR/bin/aws-metadata" \
+  'exec "$installer" --package-cli "$PACKAGE_CLI" "$@"'
+assert_contains \
+  "$PROJECT_DIR/install.sh" \
+  'AWS_METADATA_CLI_INSTALLED=%q'
+# shellcheck disable=SC2016
+assert_contains \
+  "$PROJECT_DIR/install.sh" \
+  'elif [[ -n $package_cli && /usr/local/bin/aws-metadata != "$package_cli" ]]; then'
+# shellcheck disable=SC2016
+assert_contains \
+  "$PROJECT_DIR/uninstall.sh" \
+  'if [[ ${AWS_METADATA_CLI_INSTALLED:-yes} == yes ]]; then'
+# shellcheck disable=SC2016
+assert_contains \
+  "$PROJECT_DIR/bin/aws-metadata" \
+  'exec "$uninstaller" --package-cli "$PACKAGE_CLI" "$@"'
+# shellcheck disable=SC2016
+assert_contains \
   "$PROJECT_DIR/install.sh" \
   'printf '\''AWS_METADATA_UID=%q\n'\'' "$target_uid"'
 # shellcheck disable=SC2016

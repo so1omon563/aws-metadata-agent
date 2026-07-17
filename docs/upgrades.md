@@ -18,6 +18,10 @@ require a major release.
 
 ## In-place upgrades
 
+Homebrew-managed upgrades use `brew upgrade` followed by an explicit
+`aws-metadata setup` to refresh the root-owned service copy. See
+[homebrew.md](homebrew.md) for the complete package-manager ordering.
+
 To upgrade a source installation, check out the desired release tag and rerun
 the installer:
 
@@ -63,10 +67,9 @@ the Linux linger state when the project originally enabled it. It leaves
 user-owned AWS configuration, profiles, browser-authentication state, and
 unrelated personal scripts untouched.
 
-When moving between a future package-manager installation and a source
-installation, run the agent's privileged uninstall before removing the package
-payload. Package-manager-specific ordering will be documented with that
-package.
+When moving between a package-manager installation and a source installation,
+run the agent's privileged uninstall before removing the package payload. The
+Homebrew-specific ordering is documented in [homebrew.md](homebrew.md).
 
 ## Release checklist
 
