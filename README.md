@@ -11,15 +11,17 @@ through the normal EC2 instance metadata provider chain.
 ## How it works
 
 `aws-metadata-agent` keeps `aws-runas` running as a developer-owned credential
-broker and exposes it through the standard EC2 metadata endpoint. Applications
-continue using the normal AWS SDK and CLI instance metadata provider chain;
-they do not need a project-specific credential interface.
+broker and exposes it through the standard EC2 metadata endpoint.
 
 The broker handles active-profile selection, SAML/OIDC authentication, and MFA.
 Native `launchd` or systemd components keep the broker running and provide the
 minimum privileged networking needed to forward `169.254.169.254:80` to it.
 The detailed process and filesystem boundaries are described in
 [Architecture](#architecture).
+
+Applications continue to use the standard EC2 metadata endpoint exactly as
+they would on an EC2 instance, without requiring project-specific wrappers,
+credential environment variables, or SDK endpoint configuration.
 
 ## Supported platforms
 
@@ -42,7 +44,7 @@ architectures, and Linux container-runtime access may work but are not part of
 the `v0.2.0` support claim. The active profile is process state: after a service
 restart or reboot, select the profile again before requesting credentials.
 
-### Requirements
+## Requirements
 
 For a supported host configuration:
 
@@ -230,6 +232,30 @@ that variable.
 
 ## Architecture
 
+This section describes the privilege boundaries and service layout used to
+expose the EC2 metadata endpoint while keeping AWS authentication in the
+developer's account.
+
+```text
+Application / AWS SDK / AWS CLI
+              |
+              v
+      169.254.169.254:80
+              |
+              v
+  Privileged forwarding layer
+ (launchd or systemd socket)
+              |
+              v
+       127.0.0.1:18080
+              |
+              v
+aws-runas broker (developer account)
+              |
+              v
+ AWS authentication and credentials
+```
+
 ### Installed layout
 
 The installer finds the current `aws-runas` executable and installs:
@@ -294,7 +320,7 @@ For a source installation:
 Report suspected vulnerabilities privately as described in
 [SECURITY.md](SECURITY.md).
 
-## Limitations
+## Operational considerations
 
 ### One active profile
 
