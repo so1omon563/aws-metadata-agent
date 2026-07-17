@@ -59,9 +59,9 @@ MOCK_CURL_STATUS=500 MOCK_CURL_BODY='unexpected failure' \
 MOCK_CURL_STATUS=200 assert_request_timeout \
   15 "$CLI" profile test-profile --no-open
 MOCK_CURL_STATUS=200 assert_request_timeout \
-  300 "$CLI" use test-profile
+  305 "$CLI" use test-profile
 MOCK_CURL_STATUS=200 assert_request_timeout \
-  42 "$CLI" profile test-profile --open --wait 42
+  47 "$CLI" profile test-profile --open --wait 42
 MOCK_CURL_STATUS=200 assert_request_timeout \
   15 "$CLI" use test-profile --wait 0
 AWS_METADATA_REQUEST_TIMEOUT=75 MOCK_CURL_STATUS=200 assert_request_timeout \
@@ -74,6 +74,10 @@ MOCK_CURL_REQUIRED_TIMEOUT=30 MOCK_CURL_STATUS=200 \
   assert_exit 0 "$CLI" use test-profile
 MOCK_CURL_REQUIRED_TIMEOUT=30 MOCK_CURL_STATUS=200 \
   assert_exit 3 "$CLI" profile test-profile --no-open
+AWS_METADATA_REQUEST_TIMEOUT=1 MOCK_CURL_REQUIRED_TIMEOUT=30 \
+  MOCK_CURL_STATUS=200 assert_exit 5 "$CLI" use test-profile
+AWS_METADATA_REQUEST_TIMEOUT=1 MOCK_CURL_REQUIRED_TIMEOUT=30 \
+  MOCK_CURL_STATUS=200 assert_exit 3 "$CLI" use test-profile --wait 0
 
 status_output=$(MOCK_CURL_STATUS=500 MOCK_CURL_BODY='profile not set' \
   "$CLI" status --json)

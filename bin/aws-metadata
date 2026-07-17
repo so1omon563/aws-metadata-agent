@@ -5,6 +5,7 @@ set -o pipefail
 
 readonly BASE_URL="${AWS_METADATA_URL:-http://169.254.169.254}"
 readonly DEFAULT_WAIT="${AWS_METADATA_WAIT_SECONDS:-0}"
+readonly AUTH_REQUEST_GRACE_SECONDS=5
 readonly VERSION_FILE="${AWS_METADATA_VERSION_FILE:-/usr/local/libexec/aws-metadata-agent/VERSION}"
 readonly PACKAGE_ROOT="${AWS_METADATA_PACKAGE_ROOT:-}"
 readonly PACKAGE_CLI="${AWS_METADATA_PACKAGE_CLI:-}"
@@ -168,7 +169,7 @@ http_request() {
   local data=${3:-}
   local output_file=$4
   local request_timeout=${5:-${AWS_METADATA_REQUEST_TIMEOUT:-15}}
-  local status
+  local status curl_exit
   local curl_args=(
     --silent
     --show-error
@@ -185,7 +186,12 @@ http_request() {
   fi
 
   status=$(command curl "${curl_args[@]}" "${BASE_URL}${path}") || {
-    printf '000'
+    curl_exit=$?
+    if [[ $curl_exit -eq 28 ]]; then
+      printf 'timeout'
+    else
+      printf '000'
+    fi
     return 0
   }
   printf '%s' "$status"
@@ -243,8 +249,8 @@ profile_command() (
   request_timeout=${AWS_METADATA_REQUEST_TIMEOUT:-}
   if [[ -z $request_timeout ]]; then
     request_timeout=15
-    if [[ $browser == true ]] && ((wait_seconds > request_timeout)); then
-      request_timeout=$wait_seconds
+    if [[ $browser == true ]] && ((wait_seconds > 0)); then
+      request_timeout=$((wait_seconds + AUTH_REQUEST_GRACE_SECONDS))
     fi
   fi
 
@@ -256,6 +262,16 @@ profile_command() (
     200|204)
       print_result "$json" ready "AWS metadata profile set to $profile." "$profile"
       return 0
+      ;;
+    timeout)
+      if [[ $browser == true ]] && ((wait_seconds > 0)); then
+        print_result "$json" timeout \
+          "Timed out waiting for authentication for $profile." "$profile"
+        return 5
+      fi
+      print_result "$json" unavailable \
+        "AWS metadata service is unavailable at $BASE_URL." "$profile"
+      return 3
       ;;
     000)
       print_result "$json" unavailable \
@@ -291,6 +307,11 @@ profile_command() (
       200|204)
         print_result "$json" ready "AWS metadata profile set to $profile." "$profile"
         return 0
+        ;;
+      timeout)
+        print_result "$json" timeout \
+          "Timed out waiting for authentication for $profile." "$profile"
+        return 5
         ;;
       000)
         print_result "$json" unavailable \
@@ -357,7 +378,7 @@ status_command() (
         return 6
       fi
       ;;
-    000)
+    000|timeout)
       print_result "$json" unavailable \
         "AWS metadata service is unavailable at $BASE_URL."
       return 3
