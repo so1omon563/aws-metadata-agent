@@ -66,8 +66,13 @@ AWS_METADATA_RELEASE_DIST_DIR="$TEMP_ROOT/dist" \
   shasum -a 256 -c aws-metadata-agent-v0.2.1.tar.gz.sha256 >/dev/null
 )
 archive_version=$(tar -xOzf "$TEMP_ROOT/dist/aws-metadata-agent-v0.2.1.tar.gz" \
-  aws-metadata-agent-v0.2.1/VERSION)
+  aws-metadata-agent-0.2.1/VERSION)
 [[ $archive_version == 0.2.1 ]]
+if tar -tzf "$TEMP_ROOT/dist/aws-metadata-agent-v0.2.1.tar.gz" | \
+   grep -Ev '^aws-metadata-agent-0\.2\.1/'; then
+  printf '%s\n' 'Release archive contains an unexpected root.' >&2
+  exit 1
+fi
 first_checksum=$(cut -d ' ' -f 1 \
   "$TEMP_ROOT/dist/aws-metadata-agent-v0.2.1.tar.gz.sha256")
 AWS_METADATA_RELEASE_DIST_DIR="$TEMP_ROOT/dist" \

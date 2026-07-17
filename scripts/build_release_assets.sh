@@ -27,7 +27,7 @@ mkdir -p "$dist_dir"
 rm -f "$archive_path" "$archive_path.sha256"
 git -C "$PROJECT_DIR" archive \
   --format=tar \
-  --prefix="aws-metadata-agent-v${version}/" \
+  --prefix="aws-metadata-agent-${version}/" \
   "$tag" | gzip -n >"$archive_path"
 
 (
