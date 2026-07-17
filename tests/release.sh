@@ -100,4 +100,13 @@ grep -Fq "url \"$archive_url\"" "$formula"
 grep -Fq "sha256 \"$second_checksum\"" "$formula"
 grep -Fq 'assert_equal "0.2.1\n"' "$formula"
 
+workflow="$PROJECT_DIR/.github/workflows/bump.yml"
+expected_release_output="release_requested: \${{ steps.bump.outputs.should_release }}"
+grep -Fq "$expected_release_output" "$workflow"
+grep -Fq 'git log -1 --pretty=%B' "$workflow"
+if grep -Fq 'PR_TITLE:' "$workflow"; then
+  printf '%s\n' 'Release preflight still validates only the PR title.' >&2
+  exit 1
+fi
+
 printf '%s\n' 'Release automation tests passed.'

@@ -24,7 +24,7 @@ jobs:
       new_tag: ${{ steps.bump.outputs.new_version }}
       previous_tag: ${{ steps.bump.outputs.previous_version }}
       skipped: ${{ steps.bump.outputs.skipped }}
-      release_requested: ${{ steps.release-intent.outputs.release_requested }}
+      release_requested: ${{ steps.bump.outputs.should_release }}
 
     steps:
       - name: Check out repository
@@ -34,12 +34,10 @@ jobs:
 
       - name: Determine requested bump
         id: release-metadata
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           set -euo pipefail
 
-          text="$(printf '%s\n' "$PR_TITLE" | tr '[:upper:]' '[:lower:]')"
+          text="$(git log -1 --pretty=%B | tr '[:upper:]' '[:lower:]')"
           bump=
           count=0
           for candidate in patch minor major; do
@@ -72,23 +70,6 @@ jobs:
         run: |
           set -euo pipefail
           test "$NEW_TAG" = "v$(cat VERSION)"
-
-      - name: Detect release request
-        id: release-intent
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          set -euo pipefail
-
-          text="$(printf '%s\n' "$PR_TITLE" | tr '[:upper:]' '[:lower:]')"
-          release_requested=false
-          for marker in "#release" "#publish" "#ship"; do
-            if grep -qF "$marker" <<<"$text"; then
-              release_requested=true
-              break
-            fi
-          done
-          echo "release_requested=$release_requested" >>"$GITHUB_OUTPUT"
 
   create-release:
     name: Create GitHub Release

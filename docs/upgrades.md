@@ -97,9 +97,15 @@ publish the GitHub Release. For example:
 Prepare release 0.2.1 #patch #release
 ```
 
+The squash or merge commit message must retain those markers. The pre-tag
+validation and semantic-version action both read the checked-out merge commit,
+so editing the final message to remove or change a marker fails before any tag
+is created.
+
 After the release PR merges, `.github/workflows/bump.yml`:
 
-1. validates that the staged `VERSION` and changelog match the title marker;
+1. validates that the staged `VERSION` and changelog match the merge-commit
+   marker;
 2. uses `so1omon563/custom-semver-bumper@v1` to create the matching tag on the
    merged default-branch commit;
 3. creates a deterministic `aws-metadata-agent-vVERSION.tar.gz` from that tag
