@@ -106,6 +106,18 @@ assert_contains \
 # shellcheck disable=SC2016
 assert_contains \
   "$PROJECT_DIR/install.sh" \
+  'install -m 0644 "$PROJECT_DIR/VERSION" "$SERVICE_VERSION"'
+# shellcheck disable=SC2016
+assert_contains \
+  "$PROJECT_DIR/install.sh" \
+  'printf '\''AWS_METADATA_CONFIG_VERSION=%q\n'\'' "$CONFIG_SCHEMA_VERSION"'
+# shellcheck disable=SC2016
+assert_contains \
+  "$PROJECT_DIR/install.sh" \
+  'if ((prior_config_version > CONFIG_SCHEMA_VERSION)); then'
+# shellcheck disable=SC2016
+assert_contains \
+  "$PROJECT_DIR/install.sh" \
   'printf '\''AWS_METADATA_UID=%q\n'\'' "$target_uid"'
 # shellcheck disable=SC2016
 assert_contains \

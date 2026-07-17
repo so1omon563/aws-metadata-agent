@@ -11,11 +11,14 @@ target_uid=''
 linux_linger_was_enabled=''
 aws_runas=''
 user_path=${AWS_METADATA_USER_PATH:-$PATH}
+agent_version=''
+readonly CONFIG_SCHEMA_VERSION=1
 readonly SERVICE_DIR=/usr/local/libexec/aws-metadata-agent
 readonly SERVICE_AWS_RUNAS=$SERVICE_DIR/aws-runas
 readonly SERVICE_SERVER=$SERVICE_DIR/aws-metadata-server
 readonly SERVICE_FORWARDER=$SERVICE_DIR/aws-metadata-forwarder
 readonly SERVICE_NETWORK=$SERVICE_DIR/aws-metadata-network
+readonly SERVICE_VERSION=$SERVICE_DIR/VERSION
 
 macos_home_directory() {
   local record
@@ -117,6 +120,17 @@ while (($#)); do
   shift
 done
 
+if [[ ! -r $PROJECT_DIR/VERSION ]]; then
+  printf '%s\n' 'VERSION is missing from the release.' >&2
+  exit 2
+fi
+agent_version=$(<"$PROJECT_DIR/VERSION")
+if [[ ! $agent_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  printf 'VERSION must contain a semantic version, received: %s\n' \
+    "$agent_version" >&2
+  exit 2
+fi
+
 if [[ -z $target_user || $target_user == root ]]; then
   printf '%s\n' 'Unable to identify the non-root user who owns the AWS configuration.' >&2
   printf '%s\n' 'Run without sudo or provide --user USER.' >&2
@@ -168,6 +182,24 @@ if ((EUID != 0)); then
   exec sudo "${sudo_args[@]}"
 fi
 
+if [[ -r /etc/aws-metadata-agent/config ]]; then
+  prior_config_version=$(awk -F= \
+    '$1 == "AWS_METADATA_CONFIG_VERSION" { print $2 }' \
+    /etc/aws-metadata-agent/config)
+  # v0.1.0 did not record a schema version and is the schema-1 baseline.
+  prior_config_version=${prior_config_version:-1}
+  if [[ ! $prior_config_version =~ ^[0-9]+$ ]]; then
+    printf 'Existing configuration has an invalid schema version: %s\n' \
+      "$prior_config_version" >&2
+    exit 2
+  fi
+  if ((prior_config_version > CONFIG_SCHEMA_VERSION)); then
+    printf 'Configuration schema %s is newer than this installer supports (%s).\n' \
+      "$prior_config_version" "$CONFIG_SCHEMA_VERSION" >&2
+    exit 2
+  fi
+fi
+
 # Preserve the pre-install linger state across upgrades so uninstall can undo
 # only the change originally made by this project.
 if [[ $(uname -s) == Linux && -r /etc/aws-metadata-agent/config ]]; then
@@ -194,15 +226,20 @@ rm -f /usr/local/bin/runas.sh
 install -m 0755 "$PROJECT_DIR/libexec/aws-metadata-server" "$SERVICE_SERVER"
 install -m 0755 "$PROJECT_DIR/libexec/aws-metadata-forwarder" "$SERVICE_FORWARDER"
 install -m 0755 "$PROJECT_DIR/libexec/aws-metadata-network" "$SERVICE_NETWORK"
+install -m 0644 "$PROJECT_DIR/VERSION" "$SERVICE_VERSION"
 if [[ $aws_runas != "$SERVICE_AWS_RUNAS" ]]; then
   install -m 0755 "$aws_runas" "$SERVICE_AWS_RUNAS"
 fi
 chown root:"$root_group" \
-  "$SERVICE_SERVER" "$SERVICE_FORWARDER" "$SERVICE_NETWORK" "$SERVICE_AWS_RUNAS"
+  "$SERVICE_SERVER" "$SERVICE_FORWARDER" "$SERVICE_NETWORK" \
+  "$SERVICE_AWS_RUNAS" "$SERVICE_VERSION"
 chmod 0755 \
   "$SERVICE_SERVER" "$SERVICE_FORWARDER" "$SERVICE_NETWORK" "$SERVICE_AWS_RUNAS"
+chmod 0644 "$SERVICE_VERSION"
 
 {
+  printf 'AWS_METADATA_AGENT_VERSION=%q\n' "$agent_version"
+  printf 'AWS_METADATA_CONFIG_VERSION=%q\n' "$CONFIG_SCHEMA_VERSION"
   printf 'AWS_METADATA_USER=%q\n' "$target_user"
   printf 'AWS_METADATA_UID=%q\n' "$target_uid"
   printf 'AWS_METADATA_HOME=%q\n' "$target_home"
@@ -339,6 +376,7 @@ case $(uname -s) in
 esac
 
 printf 'aws-metadata-agent installed for %s.\n' "$target_user"
+printf 'Version: %s\n' "$agent_version"
 printf '%s\n' 'The credential broker runs as that user; only networking runs as root.'
 printf '%s\n' 'Run: aws-metadata status'
 printf '%s\n' 'Open: http://169.254.169.254'
