@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 
 from stage_release import (
+    CURRENT_RELEASE_REFERENCE_FILES,
+    CURRENT_RELEASE_REFERENCE_RE,
     RELEASE_HEADER_RE,
     ReleaseStageError,
     Version,
@@ -16,6 +18,22 @@ from stage_release import (
     read_text,
     read_version,
 )
+
+
+def validate_current_release_references(root: Path, version: Version) -> None:
+    for relative_path in CURRENT_RELEASE_REFERENCE_FILES:
+        references = {
+            match.group("version")
+            for match in CURRENT_RELEASE_REFERENCE_RE.finditer(
+                read_text(root / relative_path)
+            )
+        }
+        if references != {str(version)}:
+            found = ", ".join(sorted(references)) or "none"
+            raise ReleaseStageError(
+                f"{relative_path} release examples must all reference "
+                f"VERSION {version}; found {found}"
+            )
 
 
 def validate_links(text: str, version: Version, latest: Version) -> None:
@@ -70,6 +88,7 @@ def check_release(root: Path, bump: str | None) -> None:
             )
 
     validate_links(changelog, version, latest)
+    validate_current_release_references(root, version)
 
 
 def main(argv: list[str] | None = None) -> int:
