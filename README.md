@@ -10,30 +10,44 @@ through the normal EC2 instance metadata provider chain.
 
 ## Status
 
-The privilege-separated macOS path has been validated on Apple Silicon with
-`aws-runas` 3.9.0, including installation, profile selection, browser-based
-authentication, AWS CLI credential discovery, reboot persistence, Docker
-Desktop access, uninstall, and clean reinstall.
+The `v0.1.0` support boundary is limited to the two host configurations that
+have passed end-to-end validation:
 
-The Linux path has been validated on Ubuntu 24.04.4 LTS ARM64 in UTM with
-`aws-runas` 3.9.0, including checksum-verified bootstrap, installation,
-no-profile startup, profile selection, AWS CLI credential discovery through
-the standard IMDS provider chain, logout/reboot service persistence, and clean
-uninstall. The active profile is process state: after a service restart or
-reboot, select the profile again before requesting credentials.
+- Apple Silicon macOS 26 with `launchd`, tested on macOS 26.5.2 with
+  `aws-runas` 3.9.0. Validation covered installation, no-profile startup,
+  profile selection, browser-based authentication, standard AWS CLI credential
+  discovery, reboot persistence, Docker Desktop access, uninstall, and clean
+  reinstall.
+- Ubuntu 24.04 LTS ARM64 with systemd, tested on Ubuntu 24.04.4 in UTM with
+  `aws-runas` 3.9.0. Validation covered checksum-verified bootstrap,
+  installation, no-profile startup, profile selection, standard AWS CLI
+  credential discovery, logout/reboot service persistence, and clean
+  uninstall.
+
+Other macOS versions and architectures, other Linux distributions and
+architectures, and Linux container-runtime access may work but are not part of
+the `v0.1.0` support claim. The active profile is process state: after a service
+restart or reboot, select the profile again before requesting credentials.
 
 ## Requirements
 
-- macOS with `launchd`, or Linux with systemd
+For a supported `v0.1.0` host configuration:
+
+- Apple Silicon macOS 26 with `launchd`; or
+- Ubuntu 24.04 LTS ARM64 with systemd
+
+Both platforms require:
+
 - Bash 3.2 or newer
 - `aws-runas`
 - `curl`
 - `unzip` when using the optional bootstrap command
 - Administrator access during installation
 
-On Linux, the installer finds `systemd-socket-proxyd` in `PATH` or in the
-standard systemd private executable directories used by distributions such as
-Ubuntu.
+Linux installation additionally requires `ip`, `systemctl`, `loginctl`,
+`sudo`, a running system systemd manager, and a working systemd user manager.
+The installer finds `systemd-socket-proxyd` in `PATH` or in standard systemd
+private executable directories such as Ubuntu's `/usr/lib/systemd`.
 
 No terminal multiplexer is required.
 
@@ -92,6 +106,11 @@ version's binary can be downloaded successfully.
 ```sh
 ./install.sh
 ```
+
+Run the installer on the host operating system, not inside a container. On
+Linux, the host must provide the system and user systemd managers described in
+the requirements above. Containers remain useful as consumers of the metadata
+endpoint, but they are not a supported installation target.
 
 The installer finds the current `aws-runas` executable and installs:
 
