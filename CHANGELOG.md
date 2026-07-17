@@ -10,8 +10,32 @@ All notable changes to this project are documented here. Changes remain under
 - An inspect-first direct release installer that requires an explicit version,
   verifies a project-uploaded release archive against its published SHA-256,
   and fails closed before handing off to the existing privileged installer.
+- An integration-focused `aws-runas` configuration guide with sanitized
+  IAM, browser-SAML, OIDC, and metadata-consumer examples plus direct links to
+  the authoritative upstream documentation.
 - Automated release preparation, semantic-version tagging, verified GitHub
   release assets, and tested Homebrew tap publication.
+
+### Changed
+
+- Reorganized the README around project purpose, operation, support,
+  installation, usage, architecture, maintenance, operational considerations,
+  and development while retaining the detailed engineering content.
+- Clarified the Homebrew package-installation, privileged service-setup, and
+  conditional browser-authentication permission boundaries.
+
+### Fixed
+
+- Interactive browser-based profile selection now keeps its HTTP request alive
+  for the configured authentication wait, including longer password-recovery
+  flows, while noninteractive selection retains its short bounded timeout.
+
+### Supported hosts
+
+- Apple Silicon macOS 26 with `launchd`.
+- Ubuntu 24.04 LTS ARM64 with systemd.
+
+This release does not expand the host support boundary established by v0.1.0.
 
 ## [0.2.0] - 2026-07-16
 
