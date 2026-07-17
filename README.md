@@ -124,9 +124,9 @@ uninstall, and recovery instructions.
 ## Direct release install
 
 For supported Linux hosts, or as a secondary macOS option, use an explicitly
-pinned release. The recommended flow downloads the immutable tag archive and
-its published SHA-256, verifies it, and gives you a chance to inspect the
-existing installer before execution.
+pinned release. The recommended flow downloads the project-uploaded release
+archive and its published SHA-256, verifies it, and gives you a chance to
+inspect the existing installer before execution.
 
 See [docs/direct-install.md](docs/direct-install.md) for the complete
 inspect-first commands, the small `install-release.sh` helper, the explicit

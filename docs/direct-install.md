@@ -15,7 +15,7 @@ checksum="${archive}.sha256"
 
 curl --proto '=https' --tlsv1.2 --fail --location --show-error \
   --output "$archive" \
-  "https://github.com/so1omon563/aws-metadata-agent/archive/refs/tags/v${version}.tar.gz"
+  "https://github.com/so1omon563/aws-metadata-agent/releases/download/v${version}/${archive}"
 curl --proto '=https' --tlsv1.2 --fail --location --show-error \
   --output "$checksum" \
   "https://github.com/so1omon563/aws-metadata-agent/releases/download/v${version}/${checksum}"
@@ -87,8 +87,10 @@ curl --proto '=https' --tlsv1.2 --fail --location --show-error --silent \
   | sh -s -- --version 0.2.0
 ```
 
-The helper URL on `main` is mutable; the release archive it downloads is an
-explicit immutable tag and must match that release's published SHA-256.
+The helper URL on `main` is mutable; the versioned archive it downloads is a
+project-uploaded release asset and must match that release's published
+SHA-256. The helper does not use GitHub's generated source archives because
+GitHub does not guarantee that their bytes remain stable over time.
 
 ## Upgrade, rollback, and uninstall
 

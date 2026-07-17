@@ -88,11 +88,13 @@ Each release must:
    infrastructure details.
 6. Create the release tag only after the release commit is on the default
    branch.
-7. Download the GitHub-generated archive for that exact tag, calculate its
-   SHA-256, and publish a release asset named
-   `aws-metadata-agent-vVERSION.tar.gz.sha256`. The file must contain the hash
-   and the matching local archive filename used by `install-release.sh`.
-8. Download the published checksum and immutable tag archive from their public
-   URLs, verify the checksum, and exercise
+7. Create and upload a versioned release archive named
+   `aws-metadata-agent-vVERSION.tar.gz`, calculate its SHA-256, and upload the
+   matching `aws-metadata-agent-vVERSION.tar.gz.sha256`. The checksum file must
+   contain the hash and archive filename used by `install-release.sh`. Do not
+   checksum GitHub's generated source archive as the installation artifact;
+   GitHub does not guarantee stable bytes for those archives.
+8. Download the two published release assets from their public URLs, verify the
+   checksum, and exercise
    `install-release.sh --version VERSION -- --help` handoff without installing
    service state.

@@ -56,7 +56,7 @@ if [[ ${MOCK_CURL_FAIL:-0} == 1 ]]; then
   exit 22
 fi
 case $url in
-  */archive/refs/tags/v"$FIXTURE_VERSION".tar.gz)
+  */releases/download/v"$FIXTURE_VERSION"/aws-metadata-agent-v"$FIXTURE_VERSION".tar.gz)
     cp "$FIXTURE_ARCHIVE" "$output"
     ;;
   */releases/download/v"$FIXTURE_VERSION"/aws-metadata-agent-v"$FIXTURE_VERSION".tar.gz.sha256)
@@ -161,9 +161,9 @@ if [[ $installed_arguments != "$expected_arguments" ]]; then
   printf 'Unexpected installer arguments: %s\n' "$installed_arguments" >&2
   exit 1
 fi
-if ! grep -Fq "/archive/refs/tags/v${FIXTURE_VERSION}.tar.gz" "$CURL_LOG" ||
+if ! grep -Fq "/releases/download/v${FIXTURE_VERSION}/aws-metadata-agent-v${FIXTURE_VERSION}.tar.gz" "$CURL_LOG" ||
    ! grep -Fq "/releases/download/v${FIXTURE_VERSION}/aws-metadata-agent-v${FIXTURE_VERSION}.tar.gz.sha256" "$CURL_LOG"; then
-  printf '%s\n' 'Installer did not request the immutable archive and checksum URLs.' >&2
+  printf '%s\n' 'Installer did not request the versioned archive and checksum URLs.' >&2
   exit 1
 fi
 assert_cleaned

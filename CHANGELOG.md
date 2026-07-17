@@ -8,8 +8,8 @@ All notable changes to this project are documented here. Changes remain under
 ### Added
 
 - An inspect-first direct release installer that requires an explicit version,
-  verifies the immutable tagged archive against its published SHA-256, and
-  fails closed before handing off to the existing privileged installer.
+  verifies a project-uploaded release archive against its published SHA-256,
+  and fails closed before handing off to the existing privileged installer.
 
 ## [0.2.0] - 2026-07-16
 

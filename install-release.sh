@@ -10,7 +10,7 @@ usage() {
   cat <<'EOF'
 Usage: install-release.sh --version VERSION [-- INSTALLER OPTIONS]
 
-Downloads an immutable aws-metadata-agent release archive, verifies it against
+Downloads a versioned aws-metadata-agent release archive, verifies it against
 the SHA-256 file published with that release, and runs its existing installer.
 
 Examples:
@@ -83,7 +83,7 @@ fi
 
 archive_name="aws-metadata-agent-v${version}.tar.gz"
 checksum_name="${archive_name}.sha256"
-archive_url="https://github.com/${REPOSITORY}/archive/refs/tags/v${version}.tar.gz"
+archive_url="https://github.com/${REPOSITORY}/releases/download/v${version}/${archive_name}"
 checksum_url="https://github.com/${REPOSITORY}/releases/download/v${version}/${checksum_name}"
 release_root="aws-metadata-agent-${version}"
 
@@ -95,7 +95,7 @@ trap 'exit 1' HUP INT TERM
 archive_path=$temp_dir/$archive_name
 checksum_path=$temp_dir/$checksum_name
 
-printf 'Downloading immutable release v%s from %s\n' "$version" "$archive_url"
+printf 'Downloading versioned release v%s from %s\n' "$version" "$archive_url"
 curl --proto '=https' --tlsv1.2 --fail --location --show-error --silent \
   --output "$archive_path" "$archive_url" || fail 'Release download failed.'
 curl --proto '=https' --tlsv1.2 --fail --location --show-error --silent \
