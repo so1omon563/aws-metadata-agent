@@ -5,6 +5,12 @@ All notable changes to this project are documented here. Changes remain under
 
 ## [Unreleased]
 
+### Fixed
+
+- Interactive browser-based profile selection retries one confirmed transient
+  STS 408 after a cold browser login, allowing the newly persisted browser
+  session to complete the credential exchange without a second user command.
+
 ## [0.2.1] - 2026-07-17
 
 ### Added

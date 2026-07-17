@@ -15,6 +15,9 @@ TEMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/aws-metadata-cli.XXXXXX")
 readonly TEMP_ROOT
 trap 'rm -rf "$TEMP_ROOT"' EXIT
 readonly CURL_MAX_TIME_LOG="$TEMP_ROOT/curl-max-time"
+readonly CURL_CALL_LOG="$TEMP_ROOT/curl-calls"
+readonly CURL_RESPONSE_QUEUE="$TEMP_ROOT/curl-responses"
+readonly TRANSIENT_SAML_STS_TIMEOUT='failed to refresh cached credentials, operation error STS: AssumeRoleWithSAML, https response error StatusCode: 408, RequestID: , api error UnknownError: UnknownError'
 
 assert_exit() {
   local expected=$1
@@ -40,6 +43,17 @@ assert_request_timeout() {
   if [[ $actual != "$expected" ]]; then
     printf 'Expected request timeout %s, received %s: %s\n' \
       "$expected" "$actual" "$*" >&2
+    exit 1
+  fi
+}
+
+assert_curl_calls() {
+  local expected=$1
+  local actual
+
+  actual=$(wc -l <"$CURL_CALL_LOG" | tr -d ' ')
+  if [[ $actual != "$expected" ]]; then
+    printf 'Expected %s curl calls, received %s.\n' "$expected" "$actual" >&2
     exit 1
   fi
 }
@@ -78,6 +92,52 @@ AWS_METADATA_REQUEST_TIMEOUT=1 MOCK_CURL_REQUIRED_TIMEOUT=30 \
   MOCK_CURL_STATUS=200 assert_exit 5 "$CLI" use test-profile
 AWS_METADATA_REQUEST_TIMEOUT=1 MOCK_CURL_REQUIRED_TIMEOUT=30 \
   MOCK_CURL_STATUS=200 assert_exit 3 "$CLI" use test-profile --wait 0
+
+# A cold browser login can successfully persist its browser session and then
+# receive a transient STS 408 during the first SAML credential exchange. The
+# interactive command retries that exact response once; the warm retry can then
+# complete without requiring the user to invoke the command again.
+: >"$CURL_CALL_LOG"
+printf '500|%s\n200|\n' "$TRANSIENT_SAML_STS_TIMEOUT" >"$CURL_RESPONSE_QUEUE"
+MOCK_CURL_CALL_LOG="$CURL_CALL_LOG" \
+  MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
+  assert_exit 0 "$CLI" use test-profile
+assert_curl_calls 2
+
+# The same one-retry recovery applies when the first request asks the CLI to
+# open the browser and a later polling request receives the transient STS 408.
+: >"$CURL_CALL_LOG"
+printf '401|\n500|%s\n200|\n' \
+  "$TRANSIENT_SAML_STS_TIMEOUT" >"$CURL_RESPONSE_QUEUE"
+MOCK_CURL_CALL_LOG="$CURL_CALL_LOG" \
+  MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
+  assert_exit 0 "$CLI" use test-profile
+assert_curl_calls 3
+
+# A repeated transient response is still bounded to one retry.
+: >"$CURL_CALL_LOG"
+printf '500|%s\n500|%s\n200|\n' \
+  "$TRANSIENT_SAML_STS_TIMEOUT" "$TRANSIENT_SAML_STS_TIMEOUT" \
+  >"$CURL_RESPONSE_QUEUE"
+MOCK_CURL_CALL_LOG="$CURL_CALL_LOG" \
+  MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
+  assert_exit 6 "$CLI" use test-profile
+assert_curl_calls 2
+
+# Do not retry unrelated broker failures or noninteractive selection.
+: >"$CURL_CALL_LOG"
+printf '500|unexpected failure\n200|\n' >"$CURL_RESPONSE_QUEUE"
+MOCK_CURL_CALL_LOG="$CURL_CALL_LOG" \
+  MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
+  assert_exit 6 "$CLI" use test-profile
+assert_curl_calls 1
+
+: >"$CURL_CALL_LOG"
+printf '500|%s\n200|\n' "$TRANSIENT_SAML_STS_TIMEOUT" >"$CURL_RESPONSE_QUEUE"
+MOCK_CURL_CALL_LOG="$CURL_CALL_LOG" \
+  MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
+  assert_exit 6 "$CLI" profile test-profile --no-open
+assert_curl_calls 1
 
 status_output=$(MOCK_CURL_STATUS=500 MOCK_CURL_BODY='profile not set' \
   "$CLI" status --json)
