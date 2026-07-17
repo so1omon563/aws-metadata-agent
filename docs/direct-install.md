@@ -9,7 +9,7 @@ secondary macOS option. It does not configure AWS profiles or credentials.
 Pin the release instead of resolving a mutable `latest` reference:
 
 ```sh
-version=0.2.0
+version=0.2.1
 archive="aws-metadata-agent-v${version}.tar.gz"
 checksum="${archive}.sha256"
 
@@ -61,13 +61,13 @@ curl --proto '=https' --tlsv1.2 --fail --location --show-error \
   --output install-release.sh \
   https://raw.githubusercontent.com/so1omon563/aws-metadata-agent/main/install-release.sh
 less install-release.sh
-sh ./install-release.sh --version 0.2.0
+sh ./install-release.sh --version 0.2.1
 ```
 
 Installer options must follow a literal `--`, for example:
 
 ```sh
-sh ./install-release.sh --version 0.2.0 -- \
+sh ./install-release.sh --version 0.2.1 -- \
   --aws-runas "$HOME/.local/bin/aws-runas"
 ```
 
@@ -84,7 +84,7 @@ is:
 ```sh
 curl --proto '=https' --tlsv1.2 --fail --location --show-error --silent \
   https://raw.githubusercontent.com/so1omon563/aws-metadata-agent/main/install-release.sh \
-  | sh -s -- --version 0.2.0
+  | sh -s -- --version 0.2.1
 ```
 
 The helper URL on `main` is mutable; the versioned archive it downloads is a

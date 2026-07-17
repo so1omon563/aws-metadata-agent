@@ -17,6 +17,15 @@ TAG_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
 RELEASE_HEADER_RE = re.compile(
     r"(?m)^## \[(\d+\.\d+\.\d+)\] - (\d{4}-\d{2}-\d{2})$"
 )
+CURRENT_RELEASE_REFERENCE_RE = re.compile(
+    r"(?P<prefix>(?:^version=|--version ))"
+    r"(?P<version>\d+\.\d+\.\d+)\b",
+    re.MULTILINE,
+)
+CURRENT_RELEASE_REFERENCE_FILES = (
+    Path("docs/direct-install.md"),
+    Path("install-release.sh"),
+)
 
 
 class ReleaseStageError(RuntimeError):
@@ -151,6 +160,30 @@ def update_changelog(
     path.write_text(updated, encoding="utf-8")
 
 
+def prepare_current_release_reference_updates(
+    root: Path, previous: Version, version: Version
+) -> list[tuple[Path, str]]:
+    updates = []
+    for relative_path in CURRENT_RELEASE_REFERENCE_FILES:
+        path = root / relative_path
+        text = read_text(path)
+        references = {
+            match.group("version")
+            for match in CURRENT_RELEASE_REFERENCE_RE.finditer(text)
+        }
+        if references != {str(previous)}:
+            found = ", ".join(sorted(references)) or "none"
+            raise ReleaseStageError(
+                f"{relative_path} release examples must all reference "
+                f"{previous}; found {found}"
+            )
+        updated = CURRENT_RELEASE_REFERENCE_RE.sub(
+            lambda match: f'{match.group("prefix")}{version}', text
+        )
+        updates.append((path, updated))
+    return updates
+
+
 def stage_release(
     root: Path, bump: str, explicit_version: str | None, release_date: str, fetch: bool
 ) -> Version:
@@ -183,8 +216,13 @@ def stage_release(
     if tag.stdout.strip():
         raise ReleaseStageError(f"tag v{version} already exists")
 
+    reference_updates = prepare_current_release_reference_updates(
+        root, latest, version
+    )
     update_changelog(root / "CHANGELOG.md", latest, version, release_date)
     (root / "VERSION").write_text(f"{version}\n", encoding="utf-8")
+    for path, text in reference_updates:
+        path.write_text(text, encoding="utf-8")
     return version
 
 
