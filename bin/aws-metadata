@@ -204,6 +204,15 @@ select_profile_once() {
   http_request POST /profile "$profile" "$output_file" "$request_timeout"
 }
 
+is_transient_saml_sts_timeout() {
+  local status=$1
+  local output_file=$2
+
+  [[ $status == 500 ]] &&
+    command grep -Fq 'operation error STS: AssumeRoleWithSAML' "$output_file" &&
+    command grep -Fq 'StatusCode: 408' "$output_file"
+}
+
 profile_command() (
   local interaction_mode=$1
   shift
@@ -211,7 +220,8 @@ profile_command() (
   local browser=false
   local json=false
   local wait_seconds=$DEFAULT_WAIT
-  local status body_file started now request_timeout
+  local status body_file started now request_started request_timeout
+  local request_timeout_is_explicit=false retry_timeout
 
   if [[ $interaction_mode == interactive ]]; then
     browser=true
@@ -252,12 +262,31 @@ profile_command() (
     if [[ $browser == true ]] && ((wait_seconds > 0)); then
       request_timeout=$((wait_seconds + AUTH_REQUEST_GRACE_SECONDS))
     fi
+  else
+    request_timeout_is_explicit=true
   fi
 
   body_file=$(mktemp "${TMPDIR:-/tmp}/aws-metadata.XXXXXX") || return 6
   trap 'rm -f "$body_file"' EXIT
 
+  request_started=$(date +%s)
   status=$(select_profile_once "$profile" "$body_file" "$request_timeout")
+  if [[ $browser == true ]] && ((wait_seconds > 0)) &&
+    is_transient_saml_sts_timeout "$status" "$body_file"; then
+    retry_timeout=$request_timeout
+    if [[ $request_timeout_is_explicit == false ]]; then
+      now=$(date +%s)
+      if ((now - request_started < wait_seconds)); then
+        retry_timeout=$((wait_seconds - (now - request_started) + AUTH_REQUEST_GRACE_SECONDS))
+      else
+        retry_timeout=0
+      fi
+    fi
+
+    if ((retry_timeout > 0)); then
+      status=$(select_profile_once "$profile" "$body_file" "$retry_timeout")
+    fi
+  fi
   case $status in
     200|204)
       print_result "$json" ready "AWS metadata profile set to $profile." "$profile"

@@ -5,6 +5,8 @@ set -u
 output_file=''
 method=GET
 max_time=''
+response_body=${MOCK_CURL_BODY:-}
+response_status=${MOCK_CURL_STATUS:-200}
 
 while (($#)); do
   case $1 in
@@ -33,25 +35,37 @@ if [[ -n ${MOCK_CURL_MAX_TIME_LOG:-} ]]; then
   printf '%s\n' "$max_time" >>"$MOCK_CURL_MAX_TIME_LOG"
 fi
 
+if [[ -n ${MOCK_CURL_CALL_LOG:-} ]]; then
+  printf '%s\n' "$method" >>"$MOCK_CURL_CALL_LOG"
+fi
+
+if [[ -n ${MOCK_CURL_RESPONSE_QUEUE:-} &&
+      -s ${MOCK_CURL_RESPONSE_QUEUE:-} ]]; then
+  IFS='|' read -r response_status response_body <"$MOCK_CURL_RESPONSE_QUEUE"
+  command tail -n +2 "$MOCK_CURL_RESPONSE_QUEUE" \
+    >"${MOCK_CURL_RESPONSE_QUEUE}.next"
+  command mv "${MOCK_CURL_RESPONSE_QUEUE}.next" "$MOCK_CURL_RESPONSE_QUEUE"
+fi
+
 if [[ -n ${MOCK_CURL_REQUIRED_TIMEOUT:-} ]] &&
    ((max_time < MOCK_CURL_REQUIRED_TIMEOUT)); then
   exit 28
 fi
 
-if [[ ${MOCK_CURL_STATUS:-200} == 000 ]]; then
+if [[ $response_status == 000 ]]; then
   exit 7
 fi
 
 if [[ -n $output_file ]]; then
   if [[ $method == GET ]]; then
-    if [[ -n ${MOCK_CURL_BODY:-} ]]; then
-      printf '%s' "$MOCK_CURL_BODY" >"$output_file"
+    if [[ -n $response_body ]]; then
+      printf '%s' "$response_body" >"$output_file"
     else
       printf '%s' '{"name":"test-profile"}' >"$output_file"
     fi
   else
-    printf '%s' "${MOCK_CURL_BODY:-}" >"$output_file"
+    printf '%s' "$response_body" >"$output_file"
   fi
 fi
 
-printf '%s' "${MOCK_CURL_STATUS:-200}"
+printf '%s' "$response_status"
