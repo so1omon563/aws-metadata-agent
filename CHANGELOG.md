@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Changes remain under
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-07-17
+
 ### Added
 
 - An inspect-first direct release installer that requires an explicit version,
@@ -80,6 +82,7 @@ Other host configurations and Linux container-runtime access remain
 unverified. The metadata endpoint exposes one globally active profile, and the
 active selection must be restored after the broker restarts.
 
-[Unreleased]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/so1omon563/aws-metadata-agent/releases/tag/v0.1.0
