@@ -90,8 +90,16 @@ new active profile.
 No custom endpoint is required because `aws-metadata-agent` exposes the
 standard `169.254.169.254` address. Applications that already use the default
 credential provider chain do not need this named profile. Standalone
-`credential_source` behavior may vary among SDKs and tools; use this pattern
-for integrations known to support it and test the specific integration.
+`credential_source` is intentionally used here as a consumer compatibility
+profile, not as an assume-role profile. AWS primarily documents the setting as
+an [assume-role credential source], but the [Toolkit credential provider]
+explicitly maps the standalone `Ec2InstanceMetadata` value to its instance
+metadata provider, and AWS CLI v2 continues through its credential chain to
+IMDS. Do not add a `role_arn` merely to complete this consumer profile: that
+would ask the consumer to assume another role after retrieving the credentials
+already selected through `aws-metadata-agent`. Behavior may vary among other
+SDKs and tools; use this pattern only for integrations known to support it and
+test the specific integration.
 
 See the AWS documentation for
 [Toolkit credential profiles](https://docs.aws.amazon.com/toolkit-for-vscode/latest/userguide/setup-credentials.html)
@@ -256,3 +264,6 @@ upstream guide that defines the underlying attributes.
 - [Upstream repository](https://github.com/mmmorris1975/aws-runas)
 - [AWS Toolkit for Visual Studio Code credential profiles](https://docs.aws.amazon.com/toolkit-for-vscode/latest/userguide/setup-credentials.html)
 - [AWS EC2 instance metadata credential source](https://docs.aws.amazon.com/sdkref/latest/guide/feature-assume-role-credentials.html)
+
+[assume-role credential source]: https://docs.aws.amazon.com/sdkref/latest/guide/feature-assume-role-credentials.html
+[Toolkit credential provider]: https://github.com/aws/aws-toolkit-vscode/blob/master/packages/core/src/auth/providers/sharedCredentialsProvider.ts
