@@ -15,10 +15,12 @@ The privilege-separated macOS path has been validated on Apple Silicon with
 authentication, AWS CLI credential discovery, reboot persistence, Docker
 Desktop access, uninstall, and clean reinstall.
 
-Linux support is implemented but has not yet been integration-tested on a real
-systemd workstation or VM. Treat Linux as experimental until its install,
-profile selection, IMDS access, logout/reboot persistence, and uninstall paths
-have been validated on a representative distribution.
+The Linux path has been validated on Ubuntu 24.04.4 LTS ARM64 in UTM with
+`aws-runas` 3.9.0, including checksum-verified bootstrap, installation,
+no-profile startup, profile selection, AWS CLI credential discovery through
+the standard IMDS provider chain, logout/reboot service persistence, and clean
+uninstall. The active profile is process state: after a service restart or
+reboot, select the profile again before requesting credentials.
 
 ## Requirements
 
@@ -206,8 +208,7 @@ Container runtimes and host configurations vary in how they route the reserved
 metadata address. Test the runtime used by your team; a container may need an
 explicit route to the host or may reserve `169.254.169.254` for its own
 metadata proxy. The installer does not change Docker, Podman, or Kubernetes
-networking. Linux container access remains unverified with the rest of the
-Linux integration path.
+networking. Linux container runtime access remains separately unverified.
 
 ## Important limitation
 
