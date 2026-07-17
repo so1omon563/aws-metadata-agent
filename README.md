@@ -8,6 +8,11 @@ This project is intended for developer workstations where applications such as
 VS Code, containers, SDKs, and coding agents need to discover AWS credentials
 through the normal EC2 instance metadata provider chain.
 
+Profiles remain user-owned `aws-runas` configuration. Start with
+[Configure aws-runas](docs/aws-runas-configuration.md) for sanitized IAM, SAML,
+OIDC, and AWS Toolkit examples, the project/upstream ownership boundary, and
+links to the authoritative upstream documentation.
+
 ## How it works
 
 `aws-metadata-agent` keeps `aws-runas` running as a developer-owned credential
@@ -70,20 +75,43 @@ No terminal multiplexer is required.
 
 ### Homebrew on macOS
 
-Homebrew is the primary installation path on supported macOS hosts:
+Homebrew is the primary installation path on supported macOS hosts. First,
+trust the third-party tap and install the unprivileged package payload:
 
 ```sh
 brew trust --tap so1omon563/aws-metadata-agent
 brew tap so1omon563/aws-metadata-agent
 brew install aws-metadata-agent
+```
+
+`brew install` places the `aws-metadata` wrapper and versioned project scripts
+under the Homebrew prefix. The trust, tap, and install steps do not invoke
+`sudo`, install `aws-runas`, configure `169.254.169.254`, or load launchd
+services.
+
+Then run the separate service setup:
+
+```sh
 aws-metadata setup
 ```
 
-The formula installation is unprivileged. The explicit setup command invokes
-the reviewed installer for the link-local address and launchd services. If
-needed, it downloads `aws-runas` directly from the official upstream release
-through the existing checksum-verified bootstrap; the formula does not bundle
-or mirror it.
+Setup performs dependency resolution before privileged installation:
+
+1. If no `--aws-runas PATH` is supplied and `aws-runas` is absent from both
+   `PATH` and `~/.local/bin`, setup runs the packaged checksum-verified
+   bootstrap. The bootstrap downloads the pinned, unmodified binary from the
+   official upstream release into `~/.local/bin`; the formula does not bundle
+   or mirror it. If an executable is already available in either location,
+   setup skips the download.
+2. Setup invokes the reviewed installer, which requests `sudo` to install the
+   root-owned service payload, configure the link-local address, and load the
+   launchd services. The credential broker still runs as the installing user.
+
+To use a specific existing binary and skip automatic bootstrap discovery:
+
+```sh
+aws-metadata setup --aws-runas /absolute/path/to/aws-runas
+```
 
 See [docs/homebrew.md](docs/homebrew.md) for trust, upgrade, rollback,
 uninstall, and recovery instructions.
@@ -98,6 +126,12 @@ inspect the existing installer before execution.
 See [docs/direct-install.md](docs/direct-install.md) for the complete
 inspect-first commands, the small `install-release.sh` helper, the explicit
 warning before its optional piped form, and rollback and uninstall guidance.
+
+Unlike `aws-metadata setup`, the direct-release helper and `install.sh` do not
+run `bootstrap.sh` automatically. If `aws-runas` is not already in `PATH` or
+`~/.local/bin`, run the release's checksum-verified bootstrap first or provide
+an explicit path. Installer options for `install-release.sh` follow a literal
+`--`, for example `-- --aws-runas /absolute/path/to/aws-runas`.
 
 ### Source install
 
