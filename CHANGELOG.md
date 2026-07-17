@@ -10,6 +10,8 @@ All notable changes to this project are documented here. Changes remain under
 - An inspect-first direct release installer that requires an explicit version,
   verifies a project-uploaded release archive against its published SHA-256,
   and fails closed before handing off to the existing privileged installer.
+- Automated release preparation, semantic-version tagging, verified GitHub
+  release assets, and tested Homebrew tap publication.
 
 ## [0.2.0] - 2026-07-16
 

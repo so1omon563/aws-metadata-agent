@@ -73,28 +73,71 @@ Homebrew-specific ordering is documented in [homebrew.md](homebrew.md).
 
 ## Release checklist
 
-Each release must:
+Normal releases move through a dedicated pull request. Start from a clean
+branch based on current `main`, confirm that `CHANGELOG.md` has complete
+`Unreleased` entries, and stage the release metadata:
 
-1. Update `VERSION` and verify that it exactly matches the proposed `v` tag.
-2. Move relevant entries from `Unreleased` into a dated changelog section and
-   describe breaking changes, migration requirements, and rollback limits.
-3. Run the credential-free test suite and platform CI.
-4. For installer-affecting changes, upgrade a supported host from the
+```sh
+make stage-release BUMP=patch
+make test
+```
+
+Use `minor` or `major` only when the release scope requires it. The staging
+command fetches tags, derives the next version from the latest stable tag,
+updates `VERSION`, moves the non-empty `Unreleased` entries into a dated
+release section, and prints the required pull-request title. It refuses a dirty
+working tree, an empty changelog, an existing tag, or a version inconsistent
+with the requested bump.
+
+The release PR title must contain exactly one of `#patch`, `#minor`, or
+`#major`. Add `#release`, `#publish`, or `#ship` when merging the PR should also
+publish the GitHub Release. For example:
+
+```text
+Prepare release 0.2.1 #patch #release
+```
+
+The squash or merge commit message must retain those markers. The pre-tag
+validation and semantic-version action both read the checked-out merge commit,
+so editing the final message to remove or change a marker fails before any tag
+is created.
+
+After the release PR merges, `.github/workflows/bump.yml`:
+
+1. validates that the staged `VERSION` and changelog match the merge-commit
+   marker;
+2. uses `so1omon563/custom-semver-bumper@v1` to create the matching tag on the
+   merged default-branch commit;
+3. creates a deterministic `aws-metadata-agent-vVERSION.tar.gz` from that tag
+   and its matching `.sha256` file;
+4. uses `so1omon563/release-creator@v1` to publish grouped release notes and
+   upload both verified assets when a release marker is present.
+
+The downstream Homebrew workflow downloads and verifies those assets, updates
+the separate tap formula to the release-asset URL and checksum, runs the
+formula's strict audit, install, and tests, and opens a protected tap pull
+request. It waits for the tap checks before squash-merging the update. The
+parent repository must contain a `PACKAGING_PR_TOKEN` Actions secret backed by
+a fine-grained token with access only to
+`so1omon563/homebrew-aws-metadata-agent` and permission to write contents and
+pull requests and read Actions and commit statuses.
+
+The Homebrew workflow also supports manual dispatch with an existing release
+tag. Use that fallback to retry tap publication without creating another tag
+or GitHub Release.
+
+Every release still requires the following evidence:
+
+1. The credential-free suite and hosted platform CI pass.
+2. For installer-affecting changes, upgrade a supported host from the
    immediately previous release and verify version reporting, service health,
    metadata access, restart persistence, and uninstall. Skipped-version
    upgrades are best effort unless the release notes promise otherwise.
-5. Verify that committed fixtures, logs, and documentation contain no AWS
+3. Committed fixtures, logs, documentation, and release notes contain no AWS
    credentials, account IDs, profile names, identity output, or private
    infrastructure details.
-6. Create the release tag only after the release commit is on the default
-   branch.
-7. Create and upload a versioned release archive named
-   `aws-metadata-agent-vVERSION.tar.gz`, calculate its SHA-256, and upload the
-   matching `aws-metadata-agent-vVERSION.tar.gz.sha256`. The checksum file must
-   contain the hash and archive filename used by `install-release.sh`. Do not
-   checksum GitHub's generated source archive as the installation artifact;
-   GitHub does not guarantee stable bytes for those archives.
-8. Download the two published release assets from their public URLs, verify the
-   checksum, and exercise
-   `install-release.sh --version VERSION -- --help` handoff without installing
-   service state.
+4. The published tag, GitHub Release, archive, checksum, and Homebrew formula
+   all report the same version.
+5. Download the two public release assets, verify their checksum, and exercise
+   `install-release.sh --version VERSION -- --help` without installing service
+   state.
