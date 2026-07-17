@@ -136,8 +136,9 @@ To install another upstream release or use a user-owned binary directory:
 ```
 
 The bootstrapper does not package or mirror `aws-runas`. It downloads from
-`mmmorris1975/aws-runas`, prints the upstream source, and retains the upstream
-MIT attribution in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+the official [aws-runas repository](https://github.com/mmmorris1975/aws-runas),
+prints the upstream source, and retains the upstream MIT attribution in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 The default bootstrap destination is `$HOME/.local/bin`. If that directory is
 not in `PATH`, the command prints the exact zsh configuration line to add. It
@@ -162,6 +163,14 @@ Because completion files are sourced as shell code, the bootstrapper records
 and verifies a reviewed SHA-256 checksum for each supported completion version.
 It refuses to configure completion for an unreviewed version even if that
 version's binary can be downloaded successfully.
+
+### Configure aws-runas
+
+Profiles remain user-owned upstream configuration. Before selecting a profile,
+configure it in the standard AWS files used by `aws-runas`. See
+[Configure aws-runas](docs/aws-runas-configuration.md) for sanitized IAM, SAML,
+and OIDC examples, the project/upstream ownership boundary, and direct links to
+the authoritative [aws-runas documentation](https://mmmorris1975.github.io/aws-runas/).
 
 ## Usage
 

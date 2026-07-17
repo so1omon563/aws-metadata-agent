@@ -8,6 +8,10 @@ archive directly from its upstream repository:
 
 <https://github.com/mmmorris1975/aws-runas>
 
+Official configuration and usage documentation is published at:
+
+<https://mmmorris1975.github.io/aws-runas/>
+
 The downloaded software is distributed under the following license:
 
 ## aws-runas — MIT License
@@ -31,4 +35,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
