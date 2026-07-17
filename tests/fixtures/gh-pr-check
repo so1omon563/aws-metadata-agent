@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+: "${MOCK_GH_CHECK_QUEUE:?}"
+: "${MOCK_GH_CALL_COUNT:?}"
+
+if [[ ${1:-} != pr || ${2:-} != view ]]; then
+  printf 'Unexpected gh command: %s\n' "$*" >&2
+  exit 2
+fi
+
+calls=0
+if [[ -f $MOCK_GH_CALL_COUNT ]]; then
+  calls=$(<"$MOCK_GH_CALL_COUNT")
+fi
+printf '%s\n' "$((calls + 1))" >"$MOCK_GH_CALL_COUNT"
+
+response='<none>'
+if [[ -s $MOCK_GH_CHECK_QUEUE ]]; then
+  IFS= read -r response <"$MOCK_GH_CHECK_QUEUE"
+  sed '1d' "$MOCK_GH_CHECK_QUEUE" >"${MOCK_GH_CHECK_QUEUE}.next"
+  mv "${MOCK_GH_CHECK_QUEUE}.next" "$MOCK_GH_CHECK_QUEUE"
+fi
+
+case $response in
+  '<none>')
+    ;;
+  '<error>')
+    printf '%s\n' 'simulated GitHub API failure' >&2
+    exit 1
+    ;;
+  *)
+    printf '%s\n' "$response" | tr ',' '\n'
+    ;;
+esac

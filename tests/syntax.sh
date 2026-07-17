@@ -14,12 +14,15 @@ for script in \
   "$PROJECT_DIR/install-release.sh" \
   "$PROJECT_DIR/install.sh" \
   "$PROJECT_DIR/scripts/build_release_assets.sh" \
+  "$PROJECT_DIR/scripts/wait_for_pr_check.sh" \
   "$PROJECT_DIR/uninstall.sh" \
   "$PROJECT_DIR/tests/cli.sh" \
   "$PROJECT_DIR/tests/layout.sh" \
+  "$PROJECT_DIR/tests/pr-check-wait.sh" \
   "$PROJECT_DIR/tests/release.sh" \
   "$PROJECT_DIR/tests/release-installer.sh" \
-  "$PROJECT_DIR/tests/fixtures/curl"; do
+  "$PROJECT_DIR/tests/fixtures/curl" \
+  "$PROJECT_DIR/tests/fixtures/gh-pr-check"; do
   bash -n "$script"
 done
 
