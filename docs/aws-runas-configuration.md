@@ -54,6 +54,51 @@ set of supported IAM attributes.
 Named profiles in `~/.aws/config` use the standard `[profile NAME]` section
 form. The name after `profile` is the value passed to `aws-metadata use`.
 
+## Named metadata profile for profile-oriented tools
+
+Some integrations require the user to select a named AWS profile instead of
+using the default credential provider chain directly. The AWS Toolkit for
+Visual Studio Code is one example. A dedicated consumer-side profile can point
+those tools at the standard EC2 metadata provider:
+
+```ini
+[profile local-metadata]
+region = us-west-2
+credential_source = Ec2InstanceMetadata
+```
+
+This profile and an `aws-runas` profile serve different purposes:
+
+- `aws-metadata use example-iam` selects the real upstream profile whose
+  credentials the broker exposes;
+- `--profile local-metadata` tells a profile-oriented consumer to retrieve the
+  currently exposed credentials from EC2 metadata.
+
+For example, after selecting the upstream profile:
+
+```sh
+aws-metadata use example-iam
+aws --profile local-metadata sts get-caller-identity
+```
+
+Select `local-metadata` in the AWS Toolkit for Visual Studio Code for the same
+reason. The consumer profile does not select or lock an `aws-runas` profile,
+and it does not correspond one-to-one with an AWS role. If another caller
+changes the agent's active profile, the consumer receives credentials for the
+new active profile.
+
+No custom endpoint is required because `aws-metadata-agent` exposes the
+standard `169.254.169.254` address. Applications that already use the default
+credential provider chain do not need this named profile. Standalone
+`credential_source` behavior may vary among SDKs and tools; use this pattern
+for integrations known to support it and test the specific integration.
+
+See the AWS documentation for
+[Toolkit credential profiles](https://docs.aws.amazon.com/toolkit-for-vscode/latest/userguide/setup-credentials.html)
+and the
+[EC2 instance metadata credential source](https://docs.aws.amazon.com/sdkref/latest/guide/feature-assume-role-credentials.html)
+for the underlying shared-configuration concepts.
+
 ## IAM role profile
 
 A minimal role profile uses a source profile and role ARN:
@@ -150,6 +195,49 @@ Custom configurations should preserve the same ownership boundary: define and
 authenticate the profile using supported `aws-runas` configuration, then pass
 only its profile name to `aws-metadata use`.
 
+### Browser-based Azure AD SAML with derived roles
+
+A browser-backed SAML profile can hold common authentication settings while
+several derived profiles identify the IAM roles to assume:
+
+```ini
+[profile example-saml-source]
+region = us-west-2
+saml_auth_url = https://myapps.microsoft.com/signin/<application-name>/<application-id>?tenantId=<tenant-id>
+saml_provider = browser
+credentials_duration = <duration>
+
+[profile example-role-one]
+role_arn = <role-arn>
+source_profile = example-saml-source
+
+[profile example-role-two]
+role_arn = <role-arn>
+source_profile = example-saml-source
+```
+
+Copy the Azure Enterprise Application user-access URL supplied by the identity
+administrators. The application and tenant placeholders above must not be
+committed with real values.
+
+The derived profiles inherit the SAML configuration through `source_profile`.
+Pass a derived profile such as `example-role-one` to `aws-metadata use`; the
+SAML source profile centralizes authentication but does not identify the final
+role. `credentials_duration` uses a Go duration such as `1h`, must be between
+15 minutes and 12 hours, and cannot exceed the target role's configured maximum
+session duration.
+
+The `browser` provider uses a browser session that `aws-runas` can observe for
+the SAML response. Upstream also documents a distinct `browserne` provider;
+do not substitute it without reviewing its additional identity-provider and
+role trust-policy requirements.
+
+See the official upstream
+[SAML Configuration Guide](https://mmmorris1975.github.io/aws-runas/saml_config.html)
+for shared source-profile behavior and the
+[SAML Client Configuration Guide](https://mmmorris1975.github.io/aws-runas/saml_client_config.html)
+for Azure AD and browser-provider configuration.
+
 Project-specific examples belong here only when they add an integration pattern
 that is not already clear in the upstream documentation. Sanitize profile
 names, account and identity details, role and MFA ARNs, client IDs, endpoints,
@@ -162,6 +250,9 @@ upstream guide that defines the underlying attributes.
 - [Quick Start Guide](https://mmmorris1975.github.io/aws-runas/quickstart.html)
 - [IAM Configuration Guide](https://mmmorris1975.github.io/aws-runas/iam_config.html)
 - [SAML Configuration Guide](https://mmmorris1975.github.io/aws-runas/saml_config.html)
+- [SAML Client Configuration Guide](https://mmmorris1975.github.io/aws-runas/saml_client_config.html)
 - [OIDC Configuration Guide](https://mmmorris1975.github.io/aws-runas/oidc_config.html)
 - [Metadata Credential Service](https://mmmorris1975.github.io/aws-runas/metadata_credentials.html)
 - [Upstream repository](https://github.com/mmmorris1975/aws-runas)
+- [AWS Toolkit for Visual Studio Code credential profiles](https://docs.aws.amazon.com/toolkit-for-vscode/latest/userguide/setup-credentials.html)
+- [AWS EC2 instance metadata credential source](https://docs.aws.amazon.com/sdkref/latest/guide/feature-assume-role-credentials.html)
