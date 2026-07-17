@@ -155,13 +155,15 @@ release_dir=$temp_dir/$release_root
 version_file=$release_dir/VERSION
 installer=$release_dir/install.sh
 
-[ -f "$version_file" ] && [ ! -L "$version_file" ] || \
+if [ ! -f "$version_file" ] || [ -L "$version_file" ]; then
   fail 'Verified release does not contain a regular VERSION file.'
+fi
 release_version=$(awk 'NR == 1 { print; exit }' "$version_file")
 [ "$release_version" = "$version" ] || \
   fail "Release VERSION is $release_version, expected $version."
-[ -f "$installer" ] && [ ! -L "$installer" ] && [ -x "$installer" ] || \
+if [ ! -f "$installer" ] || [ -L "$installer" ] || [ ! -x "$installer" ]; then
   fail 'Verified release does not contain an executable regular install.sh.'
+fi
 
 printf 'Verified aws-metadata-agent v%s; running its reviewed installer.\n' "$version"
 "$installer" "$@"
