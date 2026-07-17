@@ -238,7 +238,10 @@ session duration.
 The `browser` provider uses a browser session that `aws-runas` can observe for
 the SAML response. Upstream also documents a distinct `browserne` provider;
 do not substitute it without reviewing its additional identity-provider and
-role trust-policy requirements.
+role trust-policy requirements. On macOS, the `browser` provider may also need
+the `aws-runas` entry enabled under **System Settings → Privacy & Security → App
+Management**; see the
+[Homebrew browser-permission guidance](homebrew.md#browser-based-authentication-permission).
 
 See the official upstream
 [SAML Configuration Guide](https://mmmorris1975.github.io/aws-runas/saml_config.html)
