@@ -11,6 +11,11 @@ export PATH="$FIXTURES:$PATH"
 export AWS_METADATA_URL=http://127.0.0.1:9876
 export AWS_METADATA_VERSION_FILE="$PROJECT_DIR/VERSION"
 
+TEMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/aws-metadata-cli.XXXXXX")
+readonly TEMP_ROOT
+trap 'rm -rf "$TEMP_ROOT"' EXIT
+readonly CURL_MAX_TIME_LOG="$TEMP_ROOT/curl-max-time"
+
 assert_exit() {
   local expected=$1
   shift
@@ -19,6 +24,21 @@ assert_exit() {
   "$@" >/dev/null 2>&1 || actual=$?
   if [[ $actual -ne $expected ]]; then
     printf 'Expected exit %s, received %s: %s\n' \
+      "$expected" "$actual" "$*" >&2
+    exit 1
+  fi
+}
+
+assert_request_timeout() {
+  local expected=$1
+  shift
+  local actual
+
+  : >"$CURL_MAX_TIME_LOG"
+  MOCK_CURL_MAX_TIME_LOG="$CURL_MAX_TIME_LOG" "$@" >/dev/null 2>&1
+  actual=$(tail -n 1 "$CURL_MAX_TIME_LOG")
+  if [[ $actual != "$expected" ]]; then
+    printf 'Expected request timeout %s, received %s: %s\n' \
       "$expected" "$actual" "$*" >&2
     exit 1
   fi
@@ -35,6 +55,29 @@ MOCK_CURL_STATUS=500 MOCK_CURL_BODY='profile not set' \
   assert_exit 0 "$CLI" status --json
 MOCK_CURL_STATUS=500 MOCK_CURL_BODY='unexpected failure' \
   assert_exit 6 "$CLI" status --json
+
+MOCK_CURL_STATUS=200 assert_request_timeout \
+  15 "$CLI" profile test-profile --no-open
+MOCK_CURL_STATUS=200 assert_request_timeout \
+  305 "$CLI" use test-profile
+MOCK_CURL_STATUS=200 assert_request_timeout \
+  47 "$CLI" profile test-profile --open --wait 42
+MOCK_CURL_STATUS=200 assert_request_timeout \
+  15 "$CLI" use test-profile --wait 0
+AWS_METADATA_REQUEST_TIMEOUT=75 MOCK_CURL_STATUS=200 assert_request_timeout \
+  75 "$CLI" use test-profile
+
+# Simulate a profile endpoint that needs longer than the normal 15-second
+# automation timeout. Interactive selection must keep the request alive for
+# its configured wait, while noninteractive selection stays bounded.
+MOCK_CURL_REQUIRED_TIMEOUT=30 MOCK_CURL_STATUS=200 \
+  assert_exit 0 "$CLI" use test-profile
+MOCK_CURL_REQUIRED_TIMEOUT=30 MOCK_CURL_STATUS=200 \
+  assert_exit 3 "$CLI" profile test-profile --no-open
+AWS_METADATA_REQUEST_TIMEOUT=1 MOCK_CURL_REQUIRED_TIMEOUT=30 \
+  MOCK_CURL_STATUS=200 assert_exit 5 "$CLI" use test-profile
+AWS_METADATA_REQUEST_TIMEOUT=1 MOCK_CURL_REQUIRED_TIMEOUT=30 \
+  MOCK_CURL_STATUS=200 assert_exit 3 "$CLI" use test-profile --wait 0
 
 status_output=$(MOCK_CURL_STATUS=500 MOCK_CURL_BODY='profile not set' \
   "$CLI" status --json)

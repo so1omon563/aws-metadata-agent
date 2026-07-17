@@ -5,6 +5,7 @@ set -o pipefail
 
 readonly BASE_URL="${AWS_METADATA_URL:-http://169.254.169.254}"
 readonly DEFAULT_WAIT="${AWS_METADATA_WAIT_SECONDS:-0}"
+readonly AUTH_REQUEST_GRACE_SECONDS=5
 readonly VERSION_FILE="${AWS_METADATA_VERSION_FILE:-/usr/local/libexec/aws-metadata-agent/VERSION}"
 readonly PACKAGE_ROOT="${AWS_METADATA_PACKAGE_ROOT:-}"
 readonly PACKAGE_CLI="${AWS_METADATA_PACKAGE_CLI:-}"
@@ -167,13 +168,14 @@ http_request() {
   local path=$2
   local data=${3:-}
   local output_file=$4
-  local status
+  local request_timeout=${5:-${AWS_METADATA_REQUEST_TIMEOUT:-15}}
+  local status curl_exit
   local curl_args=(
     --silent
     --show-error
     --noproxy '*'
     --connect-timeout "${AWS_METADATA_CONNECT_TIMEOUT:-2}"
-    --max-time "${AWS_METADATA_REQUEST_TIMEOUT:-15}"
+    --max-time "$request_timeout"
     --output "$output_file"
     --write-out '%{http_code}'
     --request "$method"
@@ -184,7 +186,12 @@ http_request() {
   fi
 
   status=$(command curl "${curl_args[@]}" "${BASE_URL}${path}") || {
-    printf '000'
+    curl_exit=$?
+    if [[ $curl_exit -eq 28 ]]; then
+      printf 'timeout'
+    else
+      printf '000'
+    fi
     return 0
   }
   printf '%s' "$status"
@@ -193,7 +200,8 @@ http_request() {
 select_profile_once() {
   local profile=$1
   local output_file=$2
-  http_request POST /profile "$profile" "$output_file"
+  local request_timeout=${3:-${AWS_METADATA_REQUEST_TIMEOUT:-15}}
+  http_request POST /profile "$profile" "$output_file" "$request_timeout"
 }
 
 profile_command() (
@@ -203,7 +211,7 @@ profile_command() (
   local browser=false
   local json=false
   local wait_seconds=$DEFAULT_WAIT
-  local status body_file started now
+  local status body_file started now request_timeout
 
   if [[ $interaction_mode == interactive ]]; then
     browser=true
@@ -238,14 +246,32 @@ profile_command() (
     shift
   done
 
+  request_timeout=${AWS_METADATA_REQUEST_TIMEOUT:-}
+  if [[ -z $request_timeout ]]; then
+    request_timeout=15
+    if [[ $browser == true ]] && ((wait_seconds > 0)); then
+      request_timeout=$((wait_seconds + AUTH_REQUEST_GRACE_SECONDS))
+    fi
+  fi
+
   body_file=$(mktemp "${TMPDIR:-/tmp}/aws-metadata.XXXXXX") || return 6
   trap 'rm -f "$body_file"' EXIT
 
-  status=$(select_profile_once "$profile" "$body_file")
+  status=$(select_profile_once "$profile" "$body_file" "$request_timeout")
   case $status in
     200|204)
       print_result "$json" ready "AWS metadata profile set to $profile." "$profile"
       return 0
+      ;;
+    timeout)
+      if [[ $browser == true ]] && ((wait_seconds > 0)); then
+        print_result "$json" timeout \
+          "Timed out waiting for authentication for $profile." "$profile"
+        return 5
+      fi
+      print_result "$json" unavailable \
+        "AWS metadata service is unavailable at $BASE_URL." "$profile"
+      return 3
       ;;
     000)
       print_result "$json" unavailable \
@@ -276,11 +302,16 @@ profile_command() (
   started=$(date +%s)
   while :; do
     sleep 2
-    status=$(select_profile_once "$profile" "$body_file")
+    status=$(select_profile_once "$profile" "$body_file" "$request_timeout")
     case $status in
       200|204)
         print_result "$json" ready "AWS metadata profile set to $profile." "$profile"
         return 0
+        ;;
+      timeout)
+        print_result "$json" timeout \
+          "Timed out waiting for authentication for $profile." "$profile"
+        return 5
         ;;
       000)
         print_result "$json" unavailable \
@@ -347,7 +378,7 @@ status_command() (
         return 6
       fi
       ;;
-    000)
+    000|timeout)
       print_result "$json" unavailable \
         "AWS metadata service is unavailable at $BASE_URL."
       return 3
