@@ -213,6 +213,27 @@ is_transient_saml_sts_timeout() {
     command grep -Fq 'StatusCode: 408' "$output_file"
 }
 
+retry_profile_after_transient_timeout() {
+  local profile=$1
+  local output_file=$2
+  local request_timeout=$3
+  local request_timeout_is_explicit=$4
+  local wait_started=$5
+  local wait_seconds=$6
+  local now retry_timeout=$request_timeout
+
+  if [[ $request_timeout_is_explicit == false ]]; then
+    now=$(date +%s)
+    if ((now - wait_started >= wait_seconds)); then
+      printf '500'
+      return 0
+    fi
+    retry_timeout=$((wait_seconds - (now - wait_started) + AUTH_REQUEST_GRACE_SECONDS))
+  fi
+
+  select_profile_once "$profile" "$output_file" "$retry_timeout"
+}
+
 profile_command() (
   local interaction_mode=$1
   shift
@@ -221,7 +242,8 @@ profile_command() (
   local json=false
   local wait_seconds=$DEFAULT_WAIT
   local status body_file started now request_started request_timeout
-  local request_timeout_is_explicit=false retry_timeout
+  local request_timeout_is_explicit=false
+  local transient_retry_used=false
 
   if [[ $interaction_mode == interactive ]]; then
     browser=true
@@ -273,19 +295,10 @@ profile_command() (
   status=$(select_profile_once "$profile" "$body_file" "$request_timeout")
   if [[ $browser == true ]] && ((wait_seconds > 0)) &&
     is_transient_saml_sts_timeout "$status" "$body_file"; then
-    retry_timeout=$request_timeout
-    if [[ $request_timeout_is_explicit == false ]]; then
-      now=$(date +%s)
-      if ((now - request_started < wait_seconds)); then
-        retry_timeout=$((wait_seconds - (now - request_started) + AUTH_REQUEST_GRACE_SECONDS))
-      else
-        retry_timeout=0
-      fi
-    fi
-
-    if ((retry_timeout > 0)); then
-      status=$(select_profile_once "$profile" "$body_file" "$retry_timeout")
-    fi
+    transient_retry_used=true
+    status=$(retry_profile_after_transient_timeout \
+      "$profile" "$body_file" "$request_timeout" \
+      "$request_timeout_is_explicit" "$request_started" "$wait_seconds")
   fi
   case $status in
     200|204)
@@ -332,6 +345,13 @@ profile_command() (
   while :; do
     sleep 2
     status=$(select_profile_once "$profile" "$body_file" "$request_timeout")
+    if [[ $transient_retry_used == false ]] &&
+      is_transient_saml_sts_timeout "$status" "$body_file"; then
+      transient_retry_used=true
+      status=$(retry_profile_after_transient_timeout \
+        "$profile" "$body_file" "$request_timeout" \
+        "$request_timeout_is_explicit" "$started" "$wait_seconds")
+    fi
     case $status in
       200|204)
         print_result "$json" ready "AWS metadata profile set to $profile." "$profile"

@@ -104,6 +104,16 @@ MOCK_CURL_CALL_LOG="$CURL_CALL_LOG" \
   assert_exit 0 "$CLI" use test-profile
 assert_curl_calls 2
 
+# The same one-retry recovery applies when the first request asks the CLI to
+# open the browser and a later polling request receives the transient STS 408.
+: >"$CURL_CALL_LOG"
+printf '401|\n500|%s\n200|\n' \
+  "$TRANSIENT_SAML_STS_TIMEOUT" >"$CURL_RESPONSE_QUEUE"
+MOCK_CURL_CALL_LOG="$CURL_CALL_LOG" \
+  MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
+  assert_exit 0 "$CLI" use test-profile
+assert_curl_calls 3
+
 # A repeated transient response is still bounded to one retry.
 : >"$CURL_CALL_LOG"
 printf '500|%s\n500|%s\n200|\n' \
