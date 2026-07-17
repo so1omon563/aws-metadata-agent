@@ -200,5 +200,7 @@ jobs:
               --title "Update aws-metadata-agent to ${VERSION}" \
               --body "Automated Homebrew tap update for aws-metadata-agent ${VERSION}.")"
           fi
+          "$GITHUB_WORKSPACE/scripts/wait_for_pr_check.sh" \
+            so1omon563/homebrew-aws-metadata-agent "$pr_url" test
           gh pr checks "$pr_url" --watch --fail-fast
           gh pr merge "$pr_url" --squash --delete-branch
