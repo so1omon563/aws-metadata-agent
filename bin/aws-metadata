@@ -5,6 +5,7 @@ set -o pipefail
 
 readonly BASE_URL="${AWS_METADATA_URL:-http://169.254.169.254}"
 readonly DEFAULT_WAIT="${AWS_METADATA_WAIT_SECONDS:-0}"
+readonly VERSION_FILE="${AWS_METADATA_VERSION_FILE:-/usr/local/libexec/aws-metadata-agent/VERSION}"
 
 usage() {
   cat <<'EOF'
@@ -16,12 +17,25 @@ Usage:
   aws-metadata refresh
   aws-metadata logs
   aws-metadata diagnose
+  aws-metadata version
   aws-metadata help
 
 Exit codes for profile:
   0 ready  2 usage  3 unavailable  4 authentication required
   5 authentication timeout  6 unexpected HTTP response
 EOF
+}
+
+version_command() {
+  if (($#)); then
+    printf 'Unknown version option: %s\n' "$1" >&2
+    return 2
+  fi
+  if [[ ! -r $VERSION_FILE ]]; then
+    printf 'Unable to read the installed version from %s.\n' "$VERSION_FILE" >&2
+    return 1
+  fi
+  command cat "$VERSION_FILE"
 }
 
 json_escape() {
@@ -354,6 +368,7 @@ main() {
     open|refresh) open_browser ;;
     logs) logs_command "$@" ;;
     diagnose|doctor) diagnose_command "$@" ;;
+    version|--version) version_command "$@" ;;
     help|-h|--help) usage ;;
     *)
       printf 'Unknown command: %s\n' "$command_name" >&2

@@ -115,6 +115,7 @@ endpoint, but they are not a supported installation target.
 The installer finds the current `aws-runas` executable and installs:
 
 - `aws-metadata` into `/usr/local/bin`
+- the release version into `/usr/local/libexec/aws-metadata-agent/VERSION`
 - a protected copy of `aws-runas` under
   `/usr/local/libexec/aws-metadata-agent`, executed as the installing user
 - a user LaunchAgent on macOS or user systemd service on Linux
@@ -141,6 +142,16 @@ The installer never installs, stores, or selects an AWS profile. Profiles are
 user-specific and are selected after installation with `aws-metadata use`.
 The installer also does not modify shell startup files and does not initialize
 or publish a Git repository.
+
+## Maintenance
+
+Use `aws-metadata version` to identify the installed release. See
+[docs/upgrades.md](docs/upgrades.md) for the versioning, in-place upgrade,
+rollback, uninstall, and release policy.
+
+Report suspected vulnerabilities privately as described in
+[SECURITY.md](SECURITY.md). Architecture-specific security properties and
+limitations are documented in [docs/security.md](docs/security.md).
 
 ## Development
 
@@ -183,6 +194,7 @@ aws-metadata status
 aws-metadata status --json
 aws-metadata logs
 aws-metadata diagnose
+aws-metadata version
 ```
 
 Exit codes used by `profile`:

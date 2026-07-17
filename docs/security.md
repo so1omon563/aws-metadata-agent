@@ -1,5 +1,8 @@
 # Security notes
 
+For private vulnerability reporting and supported security-fix versions, see
+the repository [security policy](../SECURITY.md).
+
 ## Metadata credentials are intentionally reachable
 
 The purpose of this service is to let local applications and containers obtain

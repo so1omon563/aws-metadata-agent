@@ -9,6 +9,7 @@ readonly FIXTURES="$PROJECT_DIR/tests/fixtures"
 
 export PATH="$FIXTURES:$PATH"
 export AWS_METADATA_URL=http://127.0.0.1:9876
+export AWS_METADATA_VERSION_FILE="$PROJECT_DIR/VERSION"
 
 assert_exit() {
   local expected=$1
@@ -43,6 +44,22 @@ if [[ $status_output != \
   exit 1
 fi
 assert_exit 2 "$CLI" profile
+
+expected_version=$(<"$PROJECT_DIR/VERSION")
+if [[ ! $expected_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  printf 'Invalid project version: %s\n' "$expected_version" >&2
+  exit 1
+fi
+version_output=$("$CLI" version)
+if [[ $version_output != "$expected_version" ]]; then
+  printf 'Unexpected version output: %s\n' "$version_output" >&2
+  exit 1
+fi
+if [[ $("$CLI" --version) != "$version_output" ]]; then
+  printf '%s\n' '--version did not match the version command.' >&2
+  exit 1
+fi
+assert_exit 2 "$CLI" version unexpected
 
 bootstrap_output=$("$PROJECT_DIR/bootstrap.sh" --dry-run)
 if [[ $bootstrap_output != *'/mmmorris1975/aws-runas/releases/download/'* ]]; then
