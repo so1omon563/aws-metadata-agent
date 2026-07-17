@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Changes remain under
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-07-17
+
 ### Fixed
 
 - Interactive browser-based profile selection retries one confirmed transient
@@ -13,6 +15,13 @@ All notable changes to this project are documented here. Changes remain under
 - Homebrew publication waits for the tap's required test to register before
   watching its result, avoiding a race immediately after opening the tap pull
   request while retaining the protected merge gate.
+
+### Supported hosts
+
+- Apple Silicon macOS 26 with `launchd`.
+- Ubuntu 24.04 LTS ARM64 with systemd.
+
+This release does not expand the host support boundary established by v0.1.0.
 
 ## [0.2.1] - 2026-07-17
 
@@ -91,7 +100,8 @@ Other host configurations and Linux container-runtime access remain
 unverified. The metadata endpoint exposes one globally active profile, and the
 active selection must be restored after the broker restarts.
 
-[Unreleased]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/so1omon563/aws-metadata-agent/releases/tag/v0.1.0
