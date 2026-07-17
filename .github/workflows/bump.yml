@@ -1,0 +1,123 @@
+name: Version Bump and Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  bump-version:
+    if: |
+      github.event.pull_request.merged == true &&
+      (
+        contains(github.event.pull_request.title, '#patch') ||
+        contains(github.event.pull_request.title, '#minor') ||
+        contains(github.event.pull_request.title, '#major')
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      new_tag: ${{ steps.bump.outputs.new_version }}
+      previous_tag: ${{ steps.bump.outputs.previous_version }}
+      skipped: ${{ steps.bump.outputs.skipped }}
+      release_requested: ${{ steps.release-intent.outputs.release_requested }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Determine requested bump
+        id: release-metadata
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+
+          text="$(printf '%s\n' "$PR_TITLE" | tr '[:upper:]' '[:lower:]')"
+          bump=
+          count=0
+          for candidate in patch minor major; do
+            if grep -qF "#${candidate}" <<<"$text"; then
+              bump="$candidate"
+              count=$((count + 1))
+            fi
+          done
+          if [ "$count" -ne 1 ]; then
+            echo "Release PR title must contain exactly one semver marker." >&2
+            exit 1
+          fi
+          echo "bump=$bump" >>"$GITHUB_OUTPUT"
+
+      - name: Validate staged release metadata
+        env:
+          BUMP: ${{ steps.release-metadata.outputs.bump }}
+        run: python3 scripts/check_release.py --bump "$BUMP"
+
+      - name: Bump version tag
+        id: bump
+        uses: so1omon563/custom-semver-bumper@v1
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          branch_name: ${{ github.event.pull_request.head.ref }}
+
+      - name: Verify created tag matches VERSION
+        env:
+          NEW_TAG: ${{ steps.bump.outputs.new_version }}
+        run: |
+          set -euo pipefail
+          test "$NEW_TAG" = "v$(cat VERSION)"
+
+      - name: Detect release request
+        id: release-intent
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+
+          text="$(printf '%s\n' "$PR_TITLE" | tr '[:upper:]' '[:lower:]')"
+          release_requested=false
+          for marker in "#release" "#publish" "#ship"; do
+            if grep -qF "$marker" <<<"$text"; then
+              release_requested=true
+              break
+            fi
+          done
+          echo "release_requested=$release_requested" >>"$GITHUB_OUTPUT"
+
+  create-release:
+    name: Create GitHub Release
+    needs: bump-version
+    if: |
+      needs.bump-version.outputs.release_requested == 'true' &&
+      needs.bump-version.outputs.skipped != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.bump-version.outputs.new_tag }}
+
+      - name: Build and verify release assets
+        run: ./scripts/build_release_assets.sh "${{ needs.bump-version.outputs.new_tag }}"
+
+      - name: Create release
+        uses: so1omon563/release-creator@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ needs.bump-version.outputs.new_tag }}
+          from-tag: ${{ needs.bump-version.outputs.previous_tag }}
+          tag-prefix: v
+          notes-format: grouped
+          asset-paths: |
+            dist/*.tar.gz
+            dist/*.sha256

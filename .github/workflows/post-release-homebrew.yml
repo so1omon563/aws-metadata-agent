@@ -1,0 +1,204 @@
+name: Post-release Homebrew Publish
+
+on:
+  workflow_run:
+    workflows: ["Version Bump and Release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to package, such as v0.2.1
+        required: false
+        type: string
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  HOMEBREW_NO_REQUIRE_TAP_TRUST: "1"
+
+jobs:
+  publish-tap:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: macos-latest
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Check packaging PR token
+        env:
+          PACKAGING_PR_TOKEN: ${{ secrets.PACKAGING_PR_TOKEN }}
+          GH_TOKEN: ${{ secrets.PACKAGING_PR_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$PACKAGING_PR_TOKEN" ]; then
+            echo "PACKAGING_PR_TOKEN is required to update the Homebrew tap." >&2
+            exit 1
+          fi
+          gh api repos/so1omon563/homebrew-aws-metadata-agent --jq '.full_name' >/dev/null
+          gh pr list --repo so1omon563/homebrew-aws-metadata-agent --limit 1 >/dev/null
+
+      - name: Determine release tag
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ github.event.inputs.tag }}
+          WORKFLOW_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "$REQUESTED_TAG" ]; then
+            tag="$REQUESTED_TAG"
+          else
+            tag="$(gh release list --limit 1 --json tagName --jq '.[0].tagName // ""')"
+          fi
+          if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tag must look like vX.Y.Z: $tag" >&2
+            exit 1
+          fi
+          gh release view "$tag" --json tagName --jq '.tagName' >/dev/null
+
+          if [ -n "$WORKFLOW_HEAD_SHA" ]; then
+            git fetch --force origin "refs/tags/$tag:refs/tags/$tag"
+            tag_sha="$(git rev-list -n 1 "$tag")"
+            workflow_sha="$WORKFLOW_HEAD_SHA"
+            merge_sha="$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              "repos/${GITHUB_REPOSITORY}/commits/${WORKFLOW_HEAD_SHA}/pulls" \
+              --jq '[.[] | select(.merged_at != null) | .merge_commit_sha][0] // ""')"
+            if [ -n "$merge_sha" ]; then
+              workflow_sha="$merge_sha"
+            fi
+            if [ "$tag_sha" != "$workflow_sha" ]; then
+              echo "publish=false" >>"$GITHUB_OUTPUT"
+              echo "Release $tag does not point at this completed workflow; nothing to publish."
+              exit 0
+            fi
+          fi
+
+          version=${tag#v}
+          {
+            echo "publish=true"
+            echo "tag=$tag"
+            echo "version=$version"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Download and verify release assets
+        if: steps.release.outputs.publish == 'true'
+        id: assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          asset_dir="$RUNNER_TEMP/release-assets"
+          mkdir -p "$asset_dir"
+          gh release download "$TAG" \
+            --dir "$asset_dir" \
+            --pattern "aws-metadata-agent-v${VERSION}.tar.gz" \
+            --pattern "aws-metadata-agent-v${VERSION}.tar.gz.sha256"
+          (
+            cd "$asset_dir"
+            shasum -a 256 -c "aws-metadata-agent-v${VERSION}.tar.gz.sha256"
+          )
+          echo "path=$asset_dir" >>"$GITHUB_OUTPUT"
+
+      - name: Register Homebrew tap
+        if: steps.release.outputs.publish == 'true'
+        id: tap
+        env:
+          PACKAGING_PR_TOKEN: ${{ secrets.PACKAGING_PR_TOKEN }}
+        run: |
+          brew tap --custom-remote so1omon563/aws-metadata-agent \
+            "https://x-access-token:${PACKAGING_PR_TOKEN}@github.com/so1omon563/homebrew-aws-metadata-agent.git"
+          echo "path=$(brew --repo so1omon563/aws-metadata-agent)" >>"$GITHUB_OUTPUT"
+
+      - name: Update formula source
+        if: steps.release.outputs.publish == 'true'
+        env:
+          ASSET_DIR: ${{ steps.assets.outputs.path }}
+          TAP_PATH: ${{ steps.tap.outputs.path }}
+          TAG: ${{ steps.release.outputs.tag }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          archive="aws-metadata-agent-v${VERSION}.tar.gz"
+          url="https://github.com/so1omon563/aws-metadata-agent/releases/download/${TAG}/${archive}"
+          python3 scripts/update_homebrew_formula.py \
+            "$TAP_PATH/Formula/aws-metadata-agent.rb" \
+            "$VERSION" "$url" "$ASSET_DIR/${archive}.sha256"
+
+      - name: Check tap update need
+        if: steps.release.outputs.publish == 'true'
+        id: tap-update
+        working-directory: ${{ steps.tap.outputs.path }}
+        run: |
+          if git diff --quiet -- Formula/aws-metadata-agent.rb; then
+            echo "needed=false" >>"$GITHUB_OUTPUT"
+            echo "Homebrew tap is already current."
+          else
+            echo "needed=true" >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: Audit, install, and test formula
+        if: steps.release.outputs.publish == 'true' && steps.tap-update.outputs.needed == 'true'
+        working-directory: ${{ steps.tap.outputs.path }}
+        run: |
+          set -euo pipefail
+          ruby -c Formula/aws-metadata-agent.rb
+          brew audit --strict --online so1omon563/aws-metadata-agent/aws-metadata-agent
+          brew uninstall --ignore-dependencies aws-metadata-agent >/dev/null 2>&1 || true
+          brew install --build-from-source so1omon563/aws-metadata-agent/aws-metadata-agent
+          brew test so1omon563/aws-metadata-agent/aws-metadata-agent
+
+      - name: Commit tap update
+        if: steps.release.outputs.publish == 'true' && steps.tap-update.outputs.needed == 'true'
+        id: commit
+        working-directory: ${{ steps.tap.outputs.path }}
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          branch="automation/aws-metadata-agent-v${VERSION}"
+          formula_update="$(mktemp)"
+          cp Formula/aws-metadata-agent.rb "$formula_update"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            git fetch origin "$branch"
+            git switch -C "$branch" "origin/$branch"
+            cp "$formula_update" Formula/aws-metadata-agent.rb
+          else
+            git switch -c "$branch"
+          fi
+          git add Formula/aws-metadata-agent.rb
+          if ! git diff --cached --quiet; then
+            git commit -m "Update aws-metadata-agent to ${VERSION}"
+            git push origin "$branch"
+          fi
+          echo "branch=$branch" >>"$GITHUB_OUTPUT"
+
+      - name: Open, verify, and merge tap pull request
+        if: steps.release.outputs.publish == 'true' && steps.tap-update.outputs.needed == 'true'
+        working-directory: ${{ steps.tap.outputs.path }}
+        env:
+          GH_TOKEN: ${{ secrets.PACKAGING_PR_TOKEN }}
+          VERSION: ${{ steps.release.outputs.version }}
+          BRANCH: ${{ steps.commit.outputs.branch }}
+        run: |
+          set -euo pipefail
+          pr_url="$(gh pr list \
+            --repo so1omon563/homebrew-aws-metadata-agent \
+            --head "$BRANCH" --json url --jq '.[0].url // ""')"
+          if [ -z "$pr_url" ]; then
+            pr_url="$(gh pr create \
+              --repo so1omon563/homebrew-aws-metadata-agent \
+              --base main --head "$BRANCH" \
+              --title "Update aws-metadata-agent to ${VERSION}" \
+              --body "Automated Homebrew tap update for aws-metadata-agent ${VERSION}.")"
+          fi
+          gh pr checks "$pr_url" --watch --fail-fast
+          gh pr merge "$pr_url" --squash --delete-branch
