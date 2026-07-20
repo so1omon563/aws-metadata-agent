@@ -81,10 +81,11 @@ printf '%s\n' \
   'sh ./install-release.sh --version X.Y.Z' \
   >"$repo/docs/direct-install.md"
 
-printf '%s\n' "version='0.2.1'" >"$repo/README.md"
+printf '%s\n' "  export version='0.2.1'" >"$repo/README.md"
 if python3 "$repo/scripts/check_release.py" \
   --root "$repo" --bump patch >/dev/null 2>&1; then
-  printf '%s\n' 'Release checks accepted a quoted numeric README version.' >&2
+  printf '%s\n' \
+    'Release checks accepted an indented exported numeric README version.' >&2
   exit 1
 fi
 printf '%s\n' 'Use docs/direct-install.md for version-neutral release installation.' \

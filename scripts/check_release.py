@@ -19,7 +19,9 @@ from stage_release import (
 
 
 NUMERIC_INSTALL_REFERENCE_RE = re.compile(
-    r"(?:^version=['\"]?|--version\s+)\d+\.\d+\.\d+\b", re.MULTILINE
+    r"(?:^[ \t]*(?:export[ \t]+)?version[ \t]*=[ \t]*['\"]?|"
+    r"--version[ \t]+)\d+\.\d+\.\d+\b",
+    re.MULTILINE,
 )
 VERSION_NEUTRAL_REFERENCE_FILES = {
     Path("README.md"): (),
