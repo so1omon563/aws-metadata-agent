@@ -198,7 +198,7 @@ The configured files depend on `$SHELL` and the host platform:
 | Login shell | PATH configuration | Completion configuration |
 | --- | --- | --- |
 | zsh | managed block in `~/.zprofile` | managed block in `~/.zshrc`; verified upstream file under `~/.local/share/aws-runas` |
-| Bash on macOS | managed block in `~/.bash_profile` | same file; verified upstream file under `~/.local/share/aws-runas` |
+| Bash on macOS | managed block in the first existing login file: `~/.bash_profile`, `~/.bash_login`, or `~/.profile`; defaults to `~/.bash_profile` | same file; verified upstream file under `~/.local/share/aws-runas` |
 | Bash on Linux | managed block in `~/.bashrc` | same file; verified upstream file under `~/.local/share/aws-runas` |
 | fish | `$XDG_CONFIG_HOME/fish/conf.d/aws-metadata-agent.fish`, defaulting to `~/.config/fish/conf.d/aws-metadata-agent.fish` | `$XDG_CONFIG_HOME/fish/completions/aws-runas.fish`, defaulting to `~/.config/fish/completions/aws-runas.fish` |
 
@@ -208,8 +208,10 @@ scripts. Unsupported login shells receive a clear message and no shell files
 are changed.
 
 Existing content outside the managed blocks and existing file modes are
-preserved. Rerunning the command replaces each managed block without creating
-duplicates. Shell files are never modified without `--configure-shell`.
+preserved. Symlinked startup files remain symlinks and their targets receive the
+managed blocks. Rerunning the command replaces each managed block without
+creating duplicates. Shell files are never modified without
+`--configure-shell`.
 
 Existing hand-written `aws-runas` configuration outside the managed blocks is
 never removed. Bootstrap warns when it detects such configuration so the user

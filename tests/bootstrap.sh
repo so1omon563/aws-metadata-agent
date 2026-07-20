@@ -245,7 +245,7 @@ assert_count "$zsh_home/.zshrc" 1 '# >>> aws-metadata-agent aws-runas completion
 bash_home=$TEMP_ROOT/bash
 mkdir -p "$bash_home"
 if [[ $fake_platform == darwin ]]; then
-  bash_startup=$bash_home/.bash_profile
+  bash_startup=$bash_home/.bash_login
 else
   bash_startup=$bash_home/.bashrc
 fi
@@ -265,6 +265,35 @@ bash_after=$(hash_files "$bash_startup")
 [[ $bash_before == "$bash_after" ]]
 assert_count "$bash_startup" 1 '# >>> aws-metadata-agent PATH >>>'
 assert_count "$bash_startup" 1 '# >>> aws-metadata-agent aws-runas completion >>>'
+
+if [[ $fake_platform == darwin ]]; then
+  profile_home=$TEMP_ROOT/bash-profile-fallback
+  mkdir -p "$profile_home"
+  printf '%s\n' '# retained profile content' >"$profile_home/.profile"
+  run_bootstrap "$profile_home" /bin/bash --configure-shell >/dev/null
+  assert_contains "$profile_home/.profile" '# retained profile content'
+  assert_contains "$profile_home/.profile" '# >>> aws-metadata-agent PATH >>>'
+  [[ ! -e $profile_home/.bash_profile ]]
+  [[ ! -e $profile_home/.bash_login ]]
+fi
+
+symlink_home=$TEMP_ROOT/bash-symlink
+symlink_target=$symlink_home/dotfiles/bash-startup
+mkdir -p "$(dirname "$symlink_target")"
+printf '%s\n' '# retained symlink target' >"$symlink_target"
+chmod 0600 "$symlink_target"
+if [[ $fake_platform == darwin ]]; then
+  symlink_startup=$symlink_home/.bash_profile
+else
+  symlink_startup=$symlink_home/.bashrc
+fi
+ln -s "${symlink_target#"$symlink_home"/}" "$symlink_startup"
+run_bootstrap "$symlink_home" /bin/bash --configure-shell >/dev/null
+[[ -L $symlink_startup ]]
+assert_contains "$symlink_target" '# retained symlink target'
+assert_contains "$symlink_target" '# >>> aws-metadata-agent PATH >>>'
+assert_contains "$symlink_target" '# >>> aws-metadata-agent aws-runas completion >>>'
+[[ $(file_mode "$symlink_target") == 600 ]]
 
 fish_home=$TEMP_ROOT/fish
 fish_config_home=$fish_home/xdg

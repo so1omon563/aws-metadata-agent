@@ -17,7 +17,16 @@ replace_managed_block() {
   local start_marker=$2
   local end_marker=$3
   local content=$4
-  local file_dir temporary_file file_mode
+  local file_dir temporary_file file_mode symlink_target
+
+  while [[ -L $file ]]; do
+    symlink_target=$(readlink "$file")
+    if [[ $symlink_target == /* ]]; then
+      file=$symlink_target
+    else
+      file=$(dirname "$file")/$symlink_target
+    fi
+  done
 
   file_dir=$(dirname "$file")
   mkdir -p "$file_dir"
@@ -190,7 +199,15 @@ warn_unmanaged_completion() {
 }
 
 bash_startup_file() {
+  local candidate
+
   if [[ $platform == darwin ]]; then
+    for candidate in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
+      if [[ -e $candidate || -L $candidate ]]; then
+        printf '%s' "$candidate"
+        return
+      fi
+    done
     printf '%s' "$HOME/.bash_profile"
   else
     printf '%s' "$HOME/.bashrc"
