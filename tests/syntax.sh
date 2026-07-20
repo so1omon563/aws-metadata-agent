@@ -22,6 +22,7 @@ for script in \
   "$PROJECT_DIR/tests/release.sh" \
   "$PROJECT_DIR/tests/release-installer.sh" \
   "$PROJECT_DIR/tests/fixtures/curl" \
+  "$PROJECT_DIR/tests/fixtures/journalctl" \
   "$PROJECT_DIR/tests/fixtures/gh-pr-check"; do
   bash -n "$script"
 done

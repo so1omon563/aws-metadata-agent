@@ -70,6 +70,33 @@ MOCK_CURL_STATUS=500 MOCK_CURL_BODY='profile not set' \
 MOCK_CURL_STATUS=500 MOCK_CURL_BODY='unexpected failure' \
   assert_exit 6 "$CLI" status --json
 
+profile_error_exit=0
+profile_error_output=$(MOCK_CURL_STATUS=500 \
+  MOCK_CURL_BODY='failed to refresh cached credentials: sensitive-detail-marker' \
+  "$CLI" profile test-profile --no-open 2>&1) || profile_error_exit=$?
+if [[ $profile_error_exit -ne 6 ]] ||
+   [[ $profile_error_output != *'metadata endpoint at http://127.0.0.1:9876 is reachable'* ]] ||
+   [[ $profile_error_output != *'Broker error: Credential refresh failed.'* ]] ||
+   [[ $profile_error_output != *'Recent broker errors: aws-metadata errors'* ]] ||
+   [[ $profile_error_output != *'Broker log:'* ]] ||
+   [[ $profile_error_output == *'sensitive-detail-marker'* ]]; then
+  printf 'Unexpected profile diagnostic output: %s\n' "$profile_error_output" >&2
+  exit 1
+fi
+
+profile_error_exit=0
+profile_error_json=$(MOCK_CURL_STATUS=500 \
+  MOCK_CURL_BODY="$TRANSIENT_SAML_STS_TIMEOUT" \
+  "$CLI" profile test-profile --no-open --json) || profile_error_exit=$?
+if [[ $profile_error_exit -ne 6 ]] ||
+   [[ $profile_error_json != *'"state":"error"'* ]] ||
+   [[ $profile_error_json != *'"broker_error":"STS AssumeRoleWithSAML returned HTTP 408."'* ]] ||
+   [[ $profile_error_json != *'"diagnostic_command":"aws-metadata errors"'* ]] ||
+   [[ $profile_error_json == *'RequestID'* ]]; then
+  printf 'Unexpected JSON profile diagnostic: %s\n' "$profile_error_json" >&2
+  exit 1
+fi
+
 MOCK_CURL_STATUS=200 assert_request_timeout \
   15 "$CLI" profile test-profile --no-open
 MOCK_CURL_STATUS=200 assert_request_timeout \
@@ -131,6 +158,48 @@ MOCK_CURL_CALL_LOG="$CURL_CALL_LOG" \
   MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
   assert_exit 6 "$CLI" use test-profile
 assert_curl_calls 1
+
+BROKER_ERROR_FIXTURE="$TEMP_ROOT/broker-errors"
+readonly BROKER_ERROR_FIXTURE
+printf '%s\n%s\n%s\n' \
+  "2026/07/17 ERROR handleAuthError: $TRANSIENT_SAML_STS_TIMEOUT" \
+  '2026/07/17 ERROR handleAuthError: browser closed before authentication completed' \
+  '2026/07/17 ERROR handleAuthError: sensitive-detail-marker' \
+  >"$BROKER_ERROR_FIXTURE"
+
+case $(uname -s) in
+  Darwin)
+    ERROR_HOME="$TEMP_ROOT/error-home"
+    mkdir -p "$ERROR_HOME/Library/Logs"
+    cp "$BROKER_ERROR_FIXTURE" \
+      "$ERROR_HOME/Library/Logs/aws-metadata-agent.log"
+    errors_output=$(HOME="$ERROR_HOME" "$CLI" errors)
+    ;;
+  Linux)
+    errors_output=$(MOCK_JOURNAL_OUTPUT="$BROKER_ERROR_FIXTURE" "$CLI" errors)
+    journal_error_exit=0
+    journal_error_output=$(MOCK_JOURNAL_EXIT=1 "$CLI" errors 2>&1) || \
+      journal_error_exit=$?
+    if [[ $journal_error_exit -ne 1 ]] ||
+       [[ $journal_error_output != *'Unable to read the broker log'* ]] ||
+       [[ $journal_error_output == *'No broker authentication errors'* ]]; then
+      printf 'Unexpected journal read failure: %s\n' "$journal_error_output" >&2
+      exit 1
+    fi
+    ;;
+  *)
+    printf '%s\n' 'Unsupported test platform.' >&2
+    exit 1
+    ;;
+esac
+if [[ $errors_output != *'STS AssumeRoleWithSAML returned HTTP 408.'* ]] ||
+   [[ $errors_output != *'Browser authentication closed before completion.'* ]] ||
+   [[ $errors_output != *'details are redacted.'* ]] ||
+   [[ $errors_output == *'sensitive-detail-marker'* ]]; then
+  printf 'Unexpected bounded broker error output: %s\n' "$errors_output" >&2
+  exit 1
+fi
+assert_exit 2 "$CLI" errors unexpected
 
 : >"$CURL_CALL_LOG"
 printf '500|%s\n200|\n' "$TRANSIENT_SAML_STS_TIMEOUT" >"$CURL_RESPONSE_QUEUE"

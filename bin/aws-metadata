@@ -18,6 +18,7 @@ Usage:
   aws-metadata status [--json]
   aws-metadata open
   aws-metadata refresh
+  aws-metadata errors
   aws-metadata logs
   aws-metadata diagnose
   aws-metadata version
@@ -138,6 +139,74 @@ print_result() {
     printf '}\n'
   else
     printf '%s\n' "$message"
+  fi
+}
+
+broker_log_location() {
+  case "$(uname -s)" in
+    Darwin)
+      printf '%s/Library/Logs/aws-metadata-agent.log' "$HOME"
+      ;;
+    Linux)
+      printf '%s' 'systemd user journal for aws-metadata-agent.service'
+      ;;
+    *)
+      printf '%s' 'unsupported platform'
+      ;;
+  esac
+}
+
+broker_error_summary() {
+  local error_text=$1
+
+  case $error_text in
+    *'operation error STS: AssumeRoleWithSAML'*'StatusCode: 408'*)
+      printf '%s' 'STS AssumeRoleWithSAML returned HTTP 408.'
+      ;;
+    *'browser closed before authentication completed'*)
+      printf '%s' 'Browser authentication closed before completion.'
+      ;;
+    *'request canceled'*|*'context canceled'*)
+      printf '%s' 'The authentication request was canceled.'
+      ;;
+    *'AccessDenied'*)
+      printf '%s' 'AWS denied the upstream credential request.'
+      ;;
+    *'operation error STS:'*)
+      printf '%s' 'The upstream AWS STS exchange failed.'
+      ;;
+    *'failed to refresh cached credentials'*)
+      printf '%s' 'Credential refresh failed.'
+      ;;
+    *)
+      printf '%s' 'The credential broker reported an error; details are redacted.'
+      ;;
+  esac
+}
+
+print_unexpected_profile_response() {
+  local json=$1
+  local status=$2
+  local profile=$3
+  local phase=$4
+  local output_file=$5
+  local message summary log_location
+
+  message="The metadata endpoint at $BASE_URL is reachable, but the credential broker returned HTTP $status $phase $profile."
+  summary=$(broker_error_summary "$(<"$output_file")")
+  log_location=$(broker_log_location)
+
+  if [[ $json == true ]]; then
+    printf '{"state":"error","message":"%s","profile":"%s","broker_error":"%s","diagnostic_command":"aws-metadata errors","broker_log":"%s"}\n' \
+      "$(json_escape "$message")" \
+      "$(json_escape "$profile")" \
+      "$(json_escape "$summary")" \
+      "$(json_escape "$log_location")"
+  else
+    printf '%s\n' "$message"
+    printf 'Broker error: %s\n' "$summary"
+    printf '%s\n' 'Recent broker errors: aws-metadata errors'
+    printf 'Broker log: %s\n' "$log_location"
   fi
 }
 
@@ -322,8 +391,8 @@ profile_command() (
       ;;
     401) ;;
     *)
-      print_result "$json" error \
-        "AWS metadata service returned HTTP $status while selecting $profile." "$profile"
+      print_unexpected_profile_response \
+        "$json" "$status" "$profile" 'while selecting' "$body_file"
       return 6
       ;;
   esac
@@ -369,8 +438,8 @@ profile_command() (
         ;;
       401) ;;
       *)
-        print_result "$json" error \
-          "AWS metadata service returned HTTP $status while waiting for $profile." "$profile"
+        print_unexpected_profile_response \
+          "$json" "$status" "$profile" 'while waiting for' "$body_file"
         return 6
         ;;
     esac
@@ -455,6 +524,72 @@ logs_command() {
   esac
 }
 
+recent_broker_error_lines() {
+  case "$(uname -s)" in
+    Darwin)
+      command tail -n 200 "$(broker_log_location)" |
+        command awk 'index($0, "handleAuthError:")' |
+        command tail -n 10
+      ;;
+    Linux)
+      command journalctl --user-unit aws-metadata-agent.service \
+        --lines 200 --no-pager -o cat 2>/dev/null |
+        command awk 'index($0, "handleAuthError:")' |
+        command tail -n 10
+      ;;
+    *)
+      return 2
+      ;;
+  esac
+}
+
+errors_command() {
+  local line lines count=0 log_location
+
+  if (($#)); then
+    printf 'Unknown errors option: %s\n' "$1" >&2
+    return 2
+  fi
+
+  log_location=$(broker_log_location)
+  case "$(uname -s)" in
+    Darwin)
+      if [[ ! -r $log_location ]]; then
+        printf 'Broker log is not readable at %s.\n' "$log_location" >&2
+        return 1
+      fi
+      ;;
+    Linux)
+      if ! command -v journalctl >/dev/null 2>&1; then
+        printf '%s\n' 'journalctl is required to read the broker log.' >&2
+        return 1
+      fi
+      ;;
+    *)
+      printf '%s\n' 'Unsupported operating system.' >&2
+      return 2
+      ;;
+  esac
+
+  if ! lines=$(recent_broker_error_lines); then
+    printf 'Unable to read the broker log from %s.\n' "$log_location" >&2
+    return 1
+  fi
+
+  if [[ -n $lines ]]; then
+    while IFS= read -r line; do
+      printf -- '- %s\n' "$(broker_error_summary "$line")"
+      count=$((count + 1))
+    done <<<"$lines"
+  fi
+
+  if ((count == 0)); then
+    printf '%s\n' \
+      'No broker authentication errors were found in the last 200 log lines.'
+  fi
+  printf 'Broker log: %s\n' "$log_location"
+}
+
 diagnose_command() {
   local status=0
 
@@ -474,6 +609,8 @@ diagnose_command() {
     printf '%s\n' 'Metadata HTTP API: unreachable'
     status=1
   fi
+  printf 'Broker log: %s\n' "$(broker_log_location)"
+  printf '%s\n' 'Recent broker errors: aws-metadata errors'
 
   case $(uname -s) in
     Darwin)
@@ -520,6 +657,7 @@ main() {
     profile) profile_command automation "$@" ;;
     status) status_command "$@" ;;
     open|refresh) open_browser ;;
+    errors) errors_command "$@" ;;
     logs) logs_command "$@" ;;
     diagnose|doctor) diagnose_command "$@" ;;
     version|--version) version_command "$@" ;;
