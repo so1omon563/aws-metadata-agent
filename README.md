@@ -240,9 +240,22 @@ aws-metadata profile my-profile --no-open --json
 aws-metadata profile my-profile --open --wait 300
 ```
 
-Existing personal `runas.sh PROFILE` scripts can continue posting to the
-metadata endpoint, but the package does not install that user-specific
-compatibility command.
+### Stream Deck and GUI automation
+
+GUI command runners can select profiles by invoking the packaged CLI directly;
+no wrapper script or terminal window is required. For example, an Elgato
+Stream Deck key using Mac Automation's **Run Shell Command** action can run:
+
+```sh
+/opt/homebrew/bin/aws-metadata profile example-nonprod --open --wait 300 --json
+```
+
+GUI applications may not inherit the same `PATH` as an interactive shell. Use
+`command -v aws-metadata` in a terminal and configure the action with that
+absolute, package-managed path. Do not use a versioned Homebrew Cellar path.
+
+See [Stream Deck integration](docs/stream-deck.md) for prerequisites, complete
+configuration, verification, troubleshooting, and security guidance.
 
 Other commands:
 

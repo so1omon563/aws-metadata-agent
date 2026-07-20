@@ -87,6 +87,22 @@ assert_not_contains "$PROJECT_DIR/install.sh" '--profile'
 assert_not_contains "$PROJECT_DIR/install.sh" 'AWS_METADATA_PROFILE'
 # shellcheck disable=SC2016
 assert_not_contains "$PROJECT_DIR/install.sh" 'install -m 0755 "$PROJECT_DIR/bin/runas.sh"'
+assert_contains \
+  "$PROJECT_DIR/install.sh" \
+  'rm -f /usr/local/bin/runas.sh'
+assert_contains \
+  "$PROJECT_DIR/uninstall.sh" \
+  'rm -f /usr/local/bin/runas.sh'
+assert_not_contains "$PROJECT_DIR/README.md" 'runas.sh'
+assert_not_contains "$PROJECT_DIR/docs/architecture.md" 'runas.sh'
+# The assertion intentionally searches for the literal environment variable.
+# shellcheck disable=SC2016
+assert_contains \
+  "$PROJECT_DIR/docs/stream-deck.md" \
+  '"$TMPDIR/aws-metadata-streamdeck.log"'
+assert_not_contains \
+  "$PROJECT_DIR/docs/stream-deck.md" \
+  '/tmp/aws-metadata-streamdeck.log'
 assert_not_contains "$PROJECT_DIR/libexec/aws-metadata-server" 'AWS_METADATA_PROFILE'
 assert_not_contains "$PROJECT_DIR/install.sh" 'launchctl kickstart'
 assert_not_contains "$PROJECT_DIR/README.md" 'scoped PF'
