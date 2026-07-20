@@ -4,6 +4,27 @@ Troubleshoot one boundary at a time: package command, native services,
 metadata endpoint, upstream profile, browser authentication, credential
 provider chain, and finally the consuming application.
 
+## Choose the failing symptom
+
+Start with what you can observe; you do not need to know which internal
+boundary failed.
+
+| Symptom | Start here |
+| --- | --- |
+| `aws-metadata` or `aws-runas` cannot be found | [Command not found](#command-not-found) |
+| Setup completed but the endpoint cannot be reached | [Service installed but endpoint unavailable](#service-installed-but-endpoint-unavailable) |
+| Service is running but reports no profile | [Running with no active profile](#running-with-no-active-profile) |
+| The upstream profile is missing or fails directly | [Profile not found or upstream profile fails](#profile-not-found-or-upstream-profile-fails) |
+| `aws-metadata use` returns an error | [Endpoint responds but profile selection fails](#endpoint-responds-but-profile-selection-fails) |
+| A browser does not open or authentication expires | [Browser does not open or authentication times out](#browser-does-not-open-or-authentication-times-out) |
+| AWS returns the wrong account or role | [Credentials are for the wrong role](#credentials-are-for-the-wrong-role) |
+| Terminal verification works but VS Code or another GUI fails | [CLI works but a GUI application fails](#cli-works-but-a-gui-application-fails) |
+| The host works but Docker or another container does not | [Host works but a container fails](#host-works-but-a-container-fails) |
+| The active identity changes after another tool runs | [Profile changes unexpectedly](#profile-changes-unexpectedly) |
+
+For a clean first pass across every boundary, use the
+[verification checklist](verification.md).
+
 ## Command not found
 
 Check the package-managed agent command and upstream dependency separately:
@@ -147,7 +168,7 @@ environment credentials, a named profile, SSO, shared credentials,
 `credential_process`, web identity, or container credentials before IMDS.
 
 Use the isolated identity test in
-[Getting started](getting-started.md#5-prove-an-aws-client-uses-metadata).
+[Verification](verification.md#4-metadata-credential-path).
 
 ## CLI works but a GUI application fails
 
@@ -192,6 +213,7 @@ project does not currently implement leases or per-consumer locks.
 ## Related documentation
 
 - [CLI reference](cli-reference.md)
+- [Verification](verification.md)
 - [Architecture](architecture.md)
 - [Security model](security.md)
 - [Upgrades and rollback](upgrades.md)

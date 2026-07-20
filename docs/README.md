@@ -1,50 +1,61 @@
 # Documentation
 
-The documentation is organized around the path from deciding whether the
-project fits to operating it safely.
+Use this index to stay at the right level: follow a guide to complete a task,
+read a concept page to build a mental model, or open reference material for an
+exact contract.
 
-## Getting started
+## Start here
 
-1. [Getting started](getting-started.md) — choose a supported installation,
-   reach expected no-profile state, select one upstream profile, and verify an
-   AWS client through metadata.
-2. [Homebrew installation](homebrew.md) — supported macOS package, trust,
-   setup, browser permission, recovery, upgrade, and uninstall.
-3. [Direct release installation](direct-install.md) — supported Ubuntu ARM64
-   and secondary macOS inspect-first installation.
-4. [Configure aws-runas](aws-runas-configuration.md) — upstream profile
-   ownership, sanitized IAM/SAML/OIDC patterns, and official references.
+1. [Getting started](getting-started.md) — install on a supported host,
+   configure one upstream profile, select it, and reach a working AWS client.
+2. [Concepts](concepts.md) — understand the canonical metadata interface, the
+   three profile roles, global selection, and state lifetime.
+3. [Verification](verification.md) — prove service, endpoint, profile,
+   credentials, and optional consumer boundaries in one checklist.
 
-## Use the service
+## Guides
 
-- [CLI reference](cli-reference.md) — command behavior, interactive versus
-  automation defaults, diagnostics, and exit codes.
-- [Consumer recipes](consumers.md) — AWS CLI, AWS Toolkit for Visual Studio
-  Code, SDKs, containers, coding agents, and GUI automation.
-- [Container runtime validation](container-runtimes.md) — exact evidence
-  boundaries, reproducible routing checks, and runtime caveats.
-- [Stream Deck integration](stream-deck.md) — validated macOS GUI automation.
+- [Homebrew installation](homebrew.md) — install and set up the supported
+  macOS package.
+- [Direct release installation](direct-install.md) — inspect and install a
+  verified release on supported Ubuntu ARM64 or macOS.
+- [Configure aws-runas](aws-runas-configuration.md) — define upstream IAM,
+  SAML, OIDC, and consumer compatibility profiles.
+- [Consumer recipes](consumers.md) — connect AWS CLI, SDKs, VS Code, coding
+  agents, containers, and GUI automation.
+- [Stream Deck integration](stream-deck.md) — invoke the CLI from a validated
+  macOS GUI action.
+- [Troubleshooting](troubleshooting.md) — start from a visible symptom and
+  isolate the failing boundary.
 
-## Operate and understand it
+## Concepts
 
-- [Troubleshooting](troubleshooting.md) — a boundary-oriented decision tree,
-  browser failures, credential precedence, and partial-install recovery.
-- [Upgrades, rollback, and uninstall](upgrades.md) — user procedures by
+- [Concepts](concepts.md) — user-facing credential and profile model.
+- [Container runtime validation](container-runtimes.md) — evidence boundaries
+  and runtime-specific routing behavior.
+
+## Reference
+
+- [CLI reference](cli-reference.md) — commands, interaction defaults, JSON,
+  diagnostics, and exit codes.
+- [Upgrades, rollback, and uninstall](upgrades.md) — lifecycle procedures by
   installation method.
-- [Architecture](architecture.md) — process ownership, files, service startup,
-  forwarding, protocol compatibility, failure behavior, concurrency, and
-  lifecycle.
-- [Security model](security.md) — threat assumptions, credential exposure,
-  unauthenticated local switching, privilege boundaries, and a pre-install
-  checklist.
+- [Changelog](../CHANGELOG.md) — release-specific changes and validation.
 
-## Maintain the project
+## Architecture and security
+
+- [Architecture](architecture.md) — process ownership, installed files,
+  startup, forwarding, protocol compatibility, and failure behavior.
+- [Security model](security.md) — threat assumptions, credential exposure,
+  privilege boundaries, browser authentication, and pre-install review.
+- [Security policy](../SECURITY.md) — supported security-fix versions and
+  private vulnerability reporting.
+
+## Maintenance
 
 - [Contributing](../CONTRIBUTING.md) — development checks, sanitized examples,
   and pull-request expectations.
-- [Release process](releasing.md) — version staging, CI, GitHub Release assets,
-  and Homebrew publication.
-- [Security policy](../SECURITY.md) — private vulnerability reporting.
-- [Changelog](../CHANGELOG.md) — release-specific changes and validation.
+- [Release process](releasing.md) — release preparation, validation, GitHub
+  assets, and Homebrew publication.
 
 [Back to the project README](../README.md)

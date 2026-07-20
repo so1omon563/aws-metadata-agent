@@ -12,7 +12,7 @@ Stream Deck key does not reserve a profile for one application.
 
 - macOS with `aws-metadata-agent` [installed](homebrew.md),
   [configured](aws-runas-configuration.md), and
-  [running](getting-started.md#3-verify-native-service-state)
+  [running](getting-started.md#3-check-the-service)
 - Elgato Stream Deck 6.9 or later
 - The free
   [Mac Automation plugin](https://marketplace.elgato.com/product/mac-automation-8468fc12-644b-427a-84cb-127c82c5bb30)

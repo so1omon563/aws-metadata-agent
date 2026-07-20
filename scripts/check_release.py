@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate VERSION, tags, and staged changelog release metadata."""
+"""Validate release metadata and version-neutral installation documentation."""
 
 from __future__ import annotations
 
@@ -9,8 +9,6 @@ import sys
 from pathlib import Path
 
 from stage_release import (
-    CURRENT_RELEASE_REFERENCE_FILES,
-    CURRENT_RELEASE_REFERENCE_RE,
     RELEASE_HEADER_RE,
     ReleaseStageError,
     Version,
@@ -20,20 +18,30 @@ from stage_release import (
 )
 
 
-def validate_current_release_references(root: Path, version: Version) -> None:
-    for relative_path in CURRENT_RELEASE_REFERENCE_FILES:
-        references = {
-            match.group("version")
-            for match in CURRENT_RELEASE_REFERENCE_RE.finditer(
-                read_text(root / relative_path)
-            )
-        }
-        if references != {str(version)}:
-            found = ", ".join(sorted(references)) or "none"
+NUMERIC_INSTALL_REFERENCE_RE = re.compile(
+    r"(?:^version=['\"]?|--version\s+)\d+\.\d+\.\d+\b", re.MULTILINE
+)
+VERSION_NEUTRAL_REFERENCE_FILES = {
+    Path("README.md"): (),
+    Path("docs/direct-install.md"): ("version=X.Y.Z", "--version X.Y.Z"),
+    Path("install-release.sh"): ("--version X.Y.Z",),
+}
+
+
+def validate_version_neutral_references(root: Path) -> None:
+    for relative_path, required in VERSION_NEUTRAL_REFERENCE_FILES.items():
+        text = read_text(root / relative_path)
+        match = NUMERIC_INSTALL_REFERENCE_RE.search(text)
+        if match is not None:
             raise ReleaseStageError(
-                f"{relative_path} release examples must all reference "
-                f"VERSION {version}; found {found}"
+                f"{relative_path} contains a stale-prone numeric install example: "
+                f"{match.group(0)}; use X.Y.Z"
             )
+        for reference in required:
+            if reference not in text:
+                raise ReleaseStageError(
+                    f"{relative_path} is missing version-neutral example {reference!r}"
+                )
 
 
 def validate_links(text: str, version: Version, latest: Version) -> None:
@@ -88,7 +96,7 @@ def check_release(root: Path, bump: str | None) -> None:
             )
 
     validate_links(changelog, version, latest)
-    validate_current_release_references(root, version)
+    validate_version_neutral_references(root)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -97,7 +97,7 @@ reloads or restarts the native services.
 
 Healthy service state alone does not prove that a consumer is using metadata.
 After reselecting an upstream profile, repeat the provider-isolated identity
-verification from [Getting started](getting-started.md#5-prove-an-aws-client-uses-metadata).
+verification from [Verification](verification.md#4-metadata-credential-path).
 
 The active profile is process state and is normally cleared when setup restarts
 the broker. Reselect it after an upgrade:

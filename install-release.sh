@@ -14,8 +14,8 @@ Downloads a versioned aws-metadata-agent release archive, verifies it against
 the SHA-256 file published with that release, and runs its existing installer.
 
 Examples:
-  ./install-release.sh --version 0.3.0
-  ./install-release.sh --version 0.3.0 -- --aws-runas "$HOME/.local/bin/aws-runas"
+  ./install-release.sh --version X.Y.Z
+  ./install-release.sh --version X.Y.Z -- --aws-runas "$HOME/.local/bin/aws-runas"
 EOF
 }
 
