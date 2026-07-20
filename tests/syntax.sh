@@ -19,6 +19,7 @@ for script in \
   "$PROJECT_DIR/tests/cli.sh" \
   "$PROJECT_DIR/tests/bootstrap.sh" \
   "$PROJECT_DIR/tests/layout.sh" \
+  "$PROJECT_DIR/tests/container-runtime-linux.sh" \
   "$PROJECT_DIR/tests/pr-check-wait.sh" \
   "$PROJECT_DIR/tests/release.sh" \
   "$PROJECT_DIR/tests/release-installer.sh" \

@@ -10,6 +10,9 @@ All notable changes to this project are documented here. Changes remain under
 - First-class zsh, Bash, and fish PATH and completion setup through
   `bootstrap.sh --configure-shell`, including reviewed completion integrity,
   isolated-shell regression coverage, and unsupported-shell no-op behavior.
+- Recurring Docker Engine default-bridge validation on a GitHub-hosted Ubuntu
+  24.04 runner, with an immutable credential-free fixture and documented
+  container-runtime evidence boundaries.
 
 ## [0.2.2] - 2026-07-17
 

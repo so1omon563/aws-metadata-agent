@@ -16,7 +16,7 @@ jobs:
       matrix:
         os:
           - macos-latest
-          - ubuntu-latest
+          - ubuntu-24.04
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -35,3 +35,7 @@ jobs:
 
       - name: Run tests
         run: make test
+
+      - name: Validate Docker Engine metadata routing
+        if: runner.os == 'Linux'
+        run: ./tests/container-runtime-linux.sh
