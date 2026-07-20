@@ -130,20 +130,27 @@ If the key does nothing:
 6. Temporarily configure the key to capture command output:
 
    ```sh
-   /opt/homebrew/bin/aws-metadata profile example-nonprod --open --wait 300 --json > /tmp/aws-metadata-streamdeck.log 2>&1
+   /opt/homebrew/bin/aws-metadata profile example-nonprod --open --wait 300 --json > "$TMPDIR/aws-metadata-streamdeck.log" 2>&1
    ```
 
    After pressing the key, inspect the file:
 
    ```sh
-   cat /tmp/aws-metadata-streamdeck.log
+   cat "$TMPDIR/aws-metadata-streamdeck.log"
    ```
 
 If the file is not created, the Stream Deck action did not launch. If it
 contains JSON or an error, the action launched and the contents identify the
 CLI or agent boundary to investigate. Remove the temporary log after testing;
 even though the CLI output is designed for automation, local profile names may
-still be sensitive.
+still be sensitive:
+
+```sh
+rm -f "$TMPDIR/aws-metadata-streamdeck.log"
+```
+
+macOS assigns the GUI session a private `TMPDIR`. Keep diagnostic output there
+rather than at a predictable path directly under the shared `/tmp` directory.
 
 For agent-side failures, continue with the bounded diagnostics in
 [Troubleshooting profile selection](../README.md#troubleshooting-profile-selection).
