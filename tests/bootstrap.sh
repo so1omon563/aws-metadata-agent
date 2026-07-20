@@ -182,6 +182,7 @@ run_bootstrap() {
   env \
     HOME="$home" \
     SHELL="$login_shell" \
+    XDG_CONFIG_HOME= \
     PATH="$fake_bin:/usr/bin:/bin:/usr/sbin:/sbin" \
     AWS_RUNAS_INSTALL_DIR="$home/.local/bin" \
     FAKE_BAD_COMPLETION="${FAKE_BAD_COMPLETION:-}" \
