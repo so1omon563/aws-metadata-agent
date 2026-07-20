@@ -1,371 +1,293 @@
 # aws-metadata-agent
 
-Run the `aws-runas` EC2 metadata credential service as a native background
-service on macOS or Linux while retaining the standard
-`http://169.254.169.254` endpoint.
+Expose temporary credentials from a user-owned [`aws-runas`](https://mmmorris1975.github.io/aws-runas/)
+profile through the standard EC2 instance metadata endpoint on a macOS or
+Linux developer workstation.
 
-This project is intended for developer workstations where applications such as
-VS Code, containers, SDKs, and coding agents need to discover AWS credentials
-through the normal EC2 instance metadata provider chain.
+`aws-metadata-agent` fills the gap between the upstream credential broker and
+applications that only know how to use the normal AWS credential provider
+chain. VS Code, containers, SDKs, coding agents, and other local tools can use
+`http://169.254.169.254` without project-specific wrappers, credential
+environment variables, mounted AWS files, or custom SDK endpoints.
 
-Profiles remain user-owned `aws-runas` configuration. Start with
-[Configure aws-runas](docs/aws-runas-configuration.md) for sanitized IAM, SAML,
-OIDC, and AWS Toolkit examples, the project/upstream ownership boundary, and
-links to the authoritative upstream documentation.
+## Is this for me?
+
+| Good fit | Use another approach when |
+| --- | --- |
+| An application expects EC2 instance metadata credentials. | Ordinary AWS CLI profile switching already meets the need. |
+| A GUI application does not inherit shell credential variables. | Different consumers must use different roles concurrently. |
+| Trusted containers should receive temporary credentials without AWS file mounts. | Untrusted local processes or containers can reach the metadata address. |
+| Several trusted tools should use one standard credential endpoint. | Workstation-hosted metadata services are prohibited by local policy. |
+| Browser-based SAML/OIDC or MFA must remain in the developer's login session. | Profile selection must persist across broker restarts or reboots. |
+| The host matches a validated macOS or Ubuntu configuration. | Windows or an unvalidated host is required as a supported target. |
+
+This project is intended for a trusted, single-developer workstation. It is
+not a per-application credential-isolation system.
+
+## Important behavior and trust model
+
+Before installing, understand these product boundaries:
+
+- **One profile is active globally.** The most recent successful profile
+  selection affects every host application and container using this endpoint.
+- **The active selection is process state.** Native services restart after
+  logout or reboot, but the profile must be selected again after the broker
+  restarts.
+- **Credentials are intentionally reachable.** Any process or container that
+  can reach `169.254.169.254` may be able to obtain credentials for the active
+  profile.
+- **Local profile switching is intentionally unauthenticated.** A caller that
+  can reach the local metadata HTTP API can request another configured profile.
+- **Authentication remains unprivileged.** `aws-runas`, its browser session,
+  AWS configuration, and caches remain in the developer account. Root owns
+  only the installed executable copies and link-local forwarding layer.
+- **Support claims are evidence-bound.** Other hosts and runtimes may work, but
+  unvalidated configurations are not presented as supported.
+
+Read the complete [security model](docs/security.md) before exposing the
+endpoint to containers or other software you do not fully trust.
 
 ## How it works
 
-`aws-metadata-agent` keeps `aws-runas` running as a developer-owned credential
-broker and exposes it through the standard EC2 metadata endpoint.
+There are three distinct profile concepts:
 
-The broker handles active-profile selection, SAML/OIDC authentication, and MFA.
-Native `launchd` or systemd components keep the broker running and provide the
-minimum privileged networking needed to forward `169.254.169.254:80` to it.
-The detailed process and filesystem boundaries are described in
-[Architecture](#architecture).
+```text
+upstream aws-runas profile       example-nonprod in ~/.aws/config
+                                       |
+                                       | aws-metadata use example-nonprod
+                                       v
+active agent profile             one globally exposed identity
+                                       |
+                                       | EC2 metadata credential provider
+                                       v
+consumer compatibility profile  local-metadata (optional)
+```
 
-Applications continue to use the standard EC2 metadata endpoint exactly as
-they would on an EC2 instance, without requiring project-specific wrappers,
-credential environment variables, or SDK endpoint configuration.
+The **upstream profile** defines how `aws-runas` authenticates and assumes a
+role. The **active agent profile** is the one upstream profile currently
+exposed at the metadata endpoint. An optional **consumer compatibility
+profile**, such as `local-metadata`, tells a profile-oriented tool like the AWS
+Toolkit for Visual Studio Code to use EC2 metadata.
+
+Applications do not select `example-nonprod`. The agent selects it globally;
+applications consume whichever upstream profile is currently active. Most AWS
+SDKs and tools that already use the default credential provider chain do not
+need a consumer compatibility profile.
+
+The developer-owned broker listens on `127.0.0.1:18080`. Native `launchd` or
+systemd components keep it running and provide the minimum privileged
+networking needed to forward `169.254.169.254:80` to it. See
+[Architecture](docs/architecture.md) for the complete topology, installed
+layout, startup order, protocol boundary, and lifecycle.
 
 ## Supported platforms
 
-The `v0.2.0` support boundary remains limited to the two host configurations
-that have passed end-to-end validation:
+The current `0.2.x` line is supported only on the two host configurations that
+have passed end-to-end validation:
 
-- Apple Silicon macOS 26 with `launchd`, tested on macOS 26.5.2 with
-  `aws-runas` 3.9.0. Validation covered installation, no-profile startup,
-  profile selection, browser-based authentication, standard AWS CLI credential
-  discovery, reboot persistence, Docker Desktop access, uninstall, and clean
-  reinstall.
-- Ubuntu 24.04 LTS ARM64 with systemd, tested on Ubuntu 24.04.4 in UTM with
+- **Apple Silicon macOS 26 with `launchd`.** Tested on the marketing
+  `ProductVersion` reported by `sw_vers` as macOS 26.5.2, with `aws-runas`
+  3.9.0. Validation covered installation, expected no-profile startup, profile
+  selection, browser authentication, standard AWS CLI credential discovery,
+  reboot persistence, Docker Desktop access, uninstall, and clean reinstall.
+- **Ubuntu 24.04 LTS ARM64 with systemd.** Tested on Ubuntu 24.04.4 in UTM with
   `aws-runas` 3.9.0. Validation covered checksum-verified bootstrap,
-  installation, no-profile startup, profile selection, standard AWS CLI
-  credential discovery, logout/reboot service persistence, and clean
+  installation, expected no-profile startup, profile selection, standard AWS
+  CLI credential discovery, logout/reboot service persistence, and clean
   uninstall.
 
-Other macOS versions and architectures and other Linux distributions and
-architectures may work but are not part of the `v0.2.0` host support claim.
-Docker Engine container consumption has separate recurring validation on a
-GitHub-hosted Ubuntu 24.04 x86_64 runner; that routing evidence does not expand
-the supported Linux installation boundary. The active profile is process
-state: after a service restart or reboot, select the profile again before
-requesting credentials.
+| Capability | Apple Silicon macOS 26 | Ubuntu 24.04 ARM64 | Other hosts |
+| --- | --- | --- | --- |
+| Native install and uninstall | Validated | Validated | Unverified |
+| Logout or reboot service persistence | Validated | Validated | Unverified |
+| Browser-backed SAML/OIDC | Validated | Unverified | Unverified |
+| Standard AWS CLI metadata discovery | Validated | Validated | Unverified |
+| Container routing | Docker Desktop validated | Separate Docker Engine x86_64 CI routing evidence | Runtime-specific and unverified |
+| Stream Deck automation | Validated | Not applicable | Unverified |
+
+Docker Engine routing is checked separately on a GitHub-hosted Ubuntu 24.04
+x86_64 runner. That evidence proves default-bridge access to a host-owned
+metadata address; it does not expand the supported Linux installation host to
+x86_64. Podman and Kubernetes remain unverified.
+
+The support boundary was established by the initial supported-host releases
+and retained through the current patch line. Release-specific changes and
+validation are recorded in the [changelog](CHANGELOG.md). Other versions,
+architectures, distributions, and runtimes may work but are not part of the
+support claim.
 
 ## Requirements
 
 For a supported host configuration:
 
 - Apple Silicon macOS 26 with `launchd`; or
-- Ubuntu 24.04 LTS ARM64 with systemd
+- Ubuntu 24.04 LTS ARM64 with systemd.
 
 Both platforms require:
 
-- Bash 3.2 or newer
-- `aws-runas`
-- `curl`
-- `unzip` when using the optional bootstrap command
-- Administrator access during installation
+- Bash 3.2 or newer;
+- `aws-runas` 3.9.0;
+- `curl`;
+- `unzip` when bootstrapping `aws-runas`; and
+- administrator access during native service installation.
 
-Linux installation additionally requires `ip`, `systemctl`, `loginctl`,
-`sudo`, a running system systemd manager, and a working systemd user manager.
-The installer finds `systemd-socket-proxyd` in `PATH` or in standard systemd
-private executable directories such as Ubuntu's `/usr/lib/systemd`.
+Linux additionally requires `ip`, `systemctl`, `loginctl`, `sudo`, a running
+system systemd manager, and a working systemd user manager. The installer
+finds `systemd-socket-proxyd` in `PATH` or standard systemd private executable
+directories such as Ubuntu's `/usr/lib/systemd`.
 
 No terminal multiplexer is required.
 
-## Installation
+## Choose an installation path
 
-### Homebrew on macOS
+| Situation | Recommended path |
+| --- | --- |
+| Supported Apple Silicon macOS | [Homebrew](docs/homebrew.md) |
+| Supported Ubuntu ARM64 | [Pinned direct release](docs/direct-install.md) |
+| Reviewing or developing the source | Run `./install.sh` from a reviewed checkout |
+| `aws-runas` is missing | Let Homebrew setup bootstrap it, or run the release's `bootstrap.sh` before a direct/source install |
 
-Homebrew is the primary installation path on supported macOS hosts. First,
-trust the third-party tap and install the unprivileged package payload:
+`bootstrap.sh` installs the upstream dependency; it is not another way to
+install `aws-metadata-agent`.
+
+## Quick start
+
+The complete walkthrough, expected output, profile model, state lifecycle, and
+verification cautions are in [Getting started](docs/getting-started.md). The
+commands below are the supported golden paths.
+
+### macOS with Homebrew
+
+Review the [tap repository](https://github.com/so1omon563/homebrew-aws-metadata-agent),
+then install the unprivileged package and run the separate privileged setup:
 
 ```sh
 brew trust --tap so1omon563/aws-metadata-agent
 brew tap so1omon563/aws-metadata-agent
 brew install aws-metadata-agent
-```
-
-`brew install` places the `aws-metadata` wrapper and versioned project scripts
-under the Homebrew prefix. The trust, tap, and install steps do not invoke
-`sudo`, install `aws-runas`, configure `169.254.169.254`, or load launchd
-services.
-
-Then run the separate service setup:
-
-```sh
 aws-metadata setup
 ```
 
-Setup performs dependency resolution before privileged installation:
+`brew install` does not use `sudo`, install `aws-runas`, change networking, or
+load services. `aws-metadata setup` conditionally bootstraps `aws-runas`, then
+requests administrator access for the root-owned service payload, link-local
+address, and launchd services. The broker still runs as the installing user.
 
-1. If no `--aws-runas PATH` is supplied and `aws-runas` is absent from both
-   `PATH` and `~/.local/bin`, setup runs the packaged checksum-verified
-   bootstrap. The bootstrap downloads the pinned, unmodified binary from the
-   official upstream release into `~/.local/bin`; the formula does not bundle
-   or mirror it. If an executable is already available in either location,
-   setup skips the download.
-2. Setup invokes the reviewed installer, which requests `sudo` to install the
-   root-owned service payload, configure the link-local address, and load the
-   launchd services. The credential broker still runs as the installing user.
+See [Homebrew installation](docs/homebrew.md) for the tap trust lifecycle,
+what to inspect, browser App Management permission, recovery, upgrade,
+rollback, and uninstall.
 
-To use a specific existing binary and skip automatic bootstrap discovery:
+### Ubuntu ARM64 from a pinned release
 
-```sh
-aws-metadata setup --aws-runas /absolute/path/to/aws-runas
-```
+Pin the current documented release, verify the project-uploaded archive, and
+inspect both scripts before execution:
 
-For browser-based authentication on macOS, the upstream `browser` provider
-starts and manages a dedicated Chrome or Edge session. macOS may list
-`aws-runas` under **System Settings → Privacy & Security → App Management**. If
-macOS prompts for access, or the browser authentication session cannot start or
-complete while that entry is disabled, enable `aws-runas` there and retry. This
-permission is separate from `sudo` service setup and is not required merely to
-install the formula.
+```bash
+version=0.2.2
+archive="aws-metadata-agent-v${version}.tar.gz"
+checksum="${archive}.sha256"
+release_url="https://github.com/so1omon563/aws-metadata-agent/releases/download/v${version}"
 
-See [docs/homebrew.md](docs/homebrew.md) for trust, upgrade, rollback,
-uninstall, browser-permission troubleshooting, and recovery instructions.
+curl --proto '=https' --tlsv1.2 --fail --location --show-error \
+  --output "$archive" "$release_url/$archive"
+curl --proto '=https' --tlsv1.2 --fail --location --show-error \
+  --output "$checksum" "$release_url/$checksum"
+sha256sum -c "$checksum"
+tar -xzf "$archive"
+cd "aws-metadata-agent-${version}"
+less bootstrap.sh install.sh
 
-### Direct release install
-
-For supported Linux hosts, or as a secondary macOS option, use an explicitly
-pinned release. The recommended flow downloads the project-uploaded release
-archive and its published SHA-256, verifies it, and gives you a chance to
-inspect the existing installer before execution.
-
-See [docs/direct-install.md](docs/direct-install.md) for the complete
-inspect-first commands, the small `install-release.sh` helper, the explicit
-warning before its optional piped form, and rollback and uninstall guidance.
-
-Unlike `aws-metadata setup`, the direct-release helper and `install.sh` do not
-run `bootstrap.sh` automatically. If `aws-runas` is not already in `PATH` or
-`~/.local/bin`, run the release's checksum-verified bootstrap first or provide
-an explicit path. Installer options for `install-release.sh` follow a literal
-`--`, for example `-- --aws-runas /absolute/path/to/aws-runas`.
-
-### Source install
-
-```sh
+if ! command -v aws-runas >/dev/null 2>&1 && \
+   [[ ! -x "$HOME/.local/bin/aws-runas" ]]; then
+  ./bootstrap.sh
+fi
 ./install.sh
 ```
 
-Run the installer on the host operating system, not inside a container. On
-Linux, the host must provide the system and user systemd managers described in
-the requirements above. Containers remain useful as consumers of the metadata
-endpoint, but they are not a supported installation target.
+The direct installer does not bootstrap `aws-runas` automatically. It does
+search both `PATH` and `~/.local/bin`, so no shell restart is required between
+bootstrap and installation. See [Direct release installation](docs/direct-install.md)
+for prerequisites, the inspect-first helper, checksum and archive guarantees,
+and the prominently warned optional piped form.
 
-The installer searches both `PATH` and `$HOME/.local/bin/aws-runas`, so a shell
-restart is not required immediately after bootstrapping.
+### Configure, select, and verify
 
-### Installing the upstream dependency
-
-If `aws-runas` is not already installed, the optional bootstrap command
-downloads a pinned, unmodified release directly from the upstream project and
-verifies it against the upstream SHA-256 checksum file:
+After either installation path, configure or confirm one user-owned upstream
+profile. Test it directly before involving the metadata service:
 
 ```sh
-./bootstrap.sh
-```
-
-Preview the URLs and destination without downloading anything:
-
-```sh
-./bootstrap.sh --dry-run
-```
-
-To install another upstream release or use a user-owned binary directory:
-
-```sh
-./bootstrap.sh --version 3.9.0
-```
-
-The bootstrapper does not package or mirror `aws-runas`. It downloads from
-the official [aws-runas repository](https://github.com/mmmorris1975/aws-runas),
-prints the upstream source, and retains the upstream MIT attribution in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-
-The default bootstrap destination is `$HOME/.local/bin`. If that directory is
-not in `PATH`, the command prints a configuration hint for the current login
-shell. It does not modify shell startup files.
-
-To configure the detected zsh, Bash, or fish login shell explicitly and
-idempotently:
-
-```sh
-./bootstrap.sh --configure-shell
-```
-
-The configured files depend on `$SHELL` and the host platform:
-
-| Login shell | PATH configuration | Completion configuration |
-| --- | --- | --- |
-| zsh | managed block in `~/.zprofile` | managed block in `~/.zshrc`; verified upstream file under `~/.local/share/aws-runas` |
-| Bash on macOS | managed block in the first existing login file: `~/.bash_profile`, `~/.bash_login`, or `~/.profile`; defaults to `~/.bash_profile` | same file; verified upstream file under `~/.local/share/aws-runas` |
-| Bash on Linux | managed block in `~/.bashrc` | same file; verified upstream file under `~/.local/share/aws-runas` |
-| fish | `$XDG_CONFIG_HOME/fish/conf.d/aws-metadata-agent.fish`, defaulting to `~/.config/fish/conf.d/aws-metadata-agent.fish` | `$XDG_CONFIG_HOME/fish/completions/aws-runas.fish`, defaulting to `~/.config/fish/completions/aws-runas.fish` |
-
-The fish completion is native fish code tied to the supported `aws-runas`
-command surface. It does not source or translate the upstream Bash or zsh
-scripts. Unsupported login shells receive a clear message and no shell files
-are changed.
-
-Existing content outside the managed blocks and existing file modes are
-preserved. Symlinked startup files remain symlinks and their targets receive the
-managed blocks. Rerunning the command replaces each managed block without
-creating duplicates. Shell files are never modified without
-`--configure-shell`.
-
-Existing hand-written `aws-runas` configuration outside the managed blocks is
-never removed. Bootstrap warns when it detects such configuration so the user
-can review possible duplicate completion loading.
-
-Because completion files are sourced as shell code, the bootstrapper records
-and verifies reviewed SHA-256 checksums for the official upstream Bash and zsh
-files and the project-owned native fish file. It refuses to configure
-completion for an unreviewed version even if that version's binary can be
-downloaded successfully.
-
-### Configure aws-runas
-
-Profiles remain user-owned upstream configuration. Before selecting a profile,
-configure it in the standard AWS files used by `aws-runas`. See
-[Configure aws-runas](docs/aws-runas-configuration.md) for sanitized IAM, SAML,
-and OIDC examples, the project/upstream ownership boundary, and direct links to
-the authoritative [aws-runas documentation](https://mmmorris1975.github.io/aws-runas/).
-
-## Usage
-
-Switch profiles interactively. This opens the browser when authentication is
-required and waits up to 300 seconds by default:
-
-```sh
-aws-metadata use my-profile
-```
-
-If the identity provider requires a longer interaction, such as an expired
-password change or account-recovery step, extend the wait explicitly. The CLI
-keeps the blocking profile request alive for the same window so upstream
-browser authentication is not canceled while the user completes it:
-
-```sh
-aws-metadata use my-profile --wait 600
-```
-
-The lower-level command is automation-safe by default and reports
-authentication as a nonzero exit:
-
-```sh
-aws-metadata profile my-profile --no-open --json
-aws-metadata profile my-profile --open --wait 300
-```
-
-### Stream Deck and GUI automation
-
-GUI command runners can select profiles by invoking the packaged CLI directly;
-no wrapper script or terminal window is required. For example, an Elgato
-Stream Deck key using Mac Automation's **Run Shell Command** action can run:
-
-```sh
-/opt/homebrew/bin/aws-metadata profile example-nonprod --open --wait 300 --json
-```
-
-GUI applications may not inherit the same `PATH` as an interactive shell. Use
-`command -v aws-metadata` in a terminal and configure the action with that
-absolute, package-managed path. Do not use a versioned Homebrew Cellar path.
-
-See [Stream Deck integration](docs/stream-deck.md) for prerequisites, complete
-configuration, verification, troubleshooting, and security guidance.
-
-Other commands:
-
-```sh
-aws-metadata open
-aws-metadata refresh
-aws-metadata errors
-aws-metadata status
-aws-metadata status --json
-aws-metadata logs
-aws-metadata diagnose
-aws-metadata version
-aws-metadata setup
-aws-metadata uninstall
-```
-
-Exit codes used by `profile`:
-
-| Code | Meaning |
-| ---: | --- |
-| 0 | Profile selected and credentials are ready |
-| 2 | Invalid command-line usage |
-| 3 | Metadata service unavailable |
-| 4 | Browser authentication required |
-| 5 | Authentication wait timed out |
-| 6 | Unexpected HTTP response |
-
-### Browser authentication
-
-`aws-runas` provides its browser interface at:
-
-```text
-http://169.254.169.254
-```
-
-That interface handles active-profile selection, SAML/OIDC authentication, and
-MFA without requiring the server process to remain attached to a terminal.
-
-When testing an unprivileged broker directly, custom AWS SDK endpoints must
-include the trailing slash:
-
-```sh
-AWS_EC2_METADATA_SERVICE_ENDPOINT=http://127.0.0.1:18080/ aws sts get-caller-identity
-```
-
-After a full install, applications use the standard endpoint and do not need
-that variable.
-
-### Troubleshooting profile selection
-
-An unexpected HTTP response from `aws-metadata use` means the metadata endpoint
-responded, but the credential broker could not complete the profile request.
-This is distinct from an unavailable endpoint, missing link-local address, or
-unloaded service. Check both boundaries without printing profile details:
-
-```sh
-aws-metadata diagnose
-aws-metadata errors
-```
-
-`aws-metadata errors` examines at most the last 200 broker log lines, selects
-the last 10 authentication errors, and prints redacted classifications rather
-than raw upstream messages. On macOS the complete broker log is at
-`~/Library/Logs/aws-metadata-agent.log`; on Linux it is in the systemd user
-journal for `aws-metadata-agent.service`. Treat the complete log as sensitive
-until you have inspected it locally.
-
-To determine whether a failure is inside the metadata-agent path, force the
-same profile refresh directly through the installed `aws-runas` binary:
-
-```sh
-/usr/local/libexec/aws-metadata-agent/aws-runas -r my-profile /usr/bin/true
+aws_runas=$(command -v aws-runas 2>/dev/null || \
+  printf '%s\n' "$HOME/.local/bin/aws-runas")
+test -x "$aws_runas"
+"$aws_runas" -r example-nonprod /usr/bin/true
 printf 'exit=%s\n' "$?"
 ```
 
-If the direct command fails similarly, investigate the upstream profile,
-identity-provider, or AWS STS exchange. If it succeeds while
-`aws-metadata use my-profile` fails, retain the browser and role-cache state and
-report the comparison as an agent-path problem. Do not add `-v` or `-vv` to
-output that will be shared without reviewing and redacting it first: the
-official [aws-runas Program Usage](https://mmmorris1975.github.io/aws-runas/usage.html#diagnostics)
-warns that verbose diagnostics may contain AWS credentials. The official
-upstream documentation remains authoritative for deeper configuration and
-diagnostic behavior.
+An exit code of `0` confirms that upstream can obtain credentials. If the
+profile is not configured yet, follow [Configure aws-runas](docs/aws-runas-configuration.md)
+and the authoritative [upstream documentation](https://mmmorris1975.github.io/aws-runas/).
 
-## Architecture
+Verify the installed service before selecting a profile:
 
-This section describes the privilege boundaries and service layout used to
-expose the EC2 metadata endpoint while keeping AWS authentication in the
-developer's account.
+```sh
+aws-metadata status
+aws-metadata diagnose
+```
+
+A new or restarted broker should report that the metadata service is running
+and no profile is selected. That is a healthy state. Select the upstream
+profile and verify it is ready:
+
+```sh
+aws-metadata use example-nonprod
+aws-metadata status
+```
+
+Finally, make one AWS identity request while excluding the common providers
+that could mask whether the CLI reached metadata:
+
+```sh
+env \
+  -u AWS_PROFILE \
+  -u AWS_DEFAULT_PROFILE \
+  -u AWS_ACCESS_KEY_ID \
+  -u AWS_SECRET_ACCESS_KEY \
+  -u AWS_SESSION_TOKEN \
+  -u AWS_SECURITY_TOKEN \
+  -u AWS_ROLE_ARN \
+  -u AWS_WEB_IDENTITY_TOKEN_FILE \
+  -u AWS_CONTAINER_CREDENTIALS_FULL_URI \
+  -u AWS_CONTAINER_CREDENTIALS_RELATIVE_URI \
+  -u AWS_EC2_METADATA_SERVICE_ENDPOINT \
+  AWS_CONFIG_FILE=/dev/null \
+  AWS_SHARED_CREDENTIALS_FILE=/dev/null \
+  AWS_EC2_METADATA_DISABLED=false \
+  aws sts get-caller-identity --region us-east-1
+```
+
+This command makes an AWS STS request and prints identity information, not
+credentials. Confirm the expected account and role locally; do not paste real
+identity output into issues or logs. AWS tools use ordered credential provider
+chains, so a plain successful `aws sts get-caller-identity` does not by itself
+prove that metadata supplied the credentials.
+
+## Documentation
+
+Start with the [documentation index](docs/README.md).
+
+| Goal | Guide |
+| --- | --- |
+| Complete first installation and verification | [Getting started](docs/getting-started.md) |
+| Configure an upstream profile | [Configure aws-runas](docs/aws-runas-configuration.md) |
+| Understand each command | [CLI reference](docs/cli-reference.md) |
+| Connect AWS CLI, VS Code, SDKs, containers, or automation | [Consumer recipes](docs/consumers.md) |
+| Diagnose installation or authentication failures | [Troubleshooting](docs/troubleshooting.md) |
+| Understand processes, files, forwarding, IMDS compatibility, and lifecycle | [Architecture](docs/architecture.md) |
+| Evaluate credential exposure and privilege boundaries | [Security model](docs/security.md) |
+| Upgrade, roll back, or uninstall | [Upgrades and rollback](docs/upgrades.md) |
+| Develop or release the project | [Contributing](CONTRIBUTING.md) and [Release process](docs/releasing.md) |
+
+## Architecture summary
 
 ```text
 Application / AWS SDK / AWS CLI
@@ -374,7 +296,7 @@ Application / AWS SDK / AWS CLI
       169.254.169.254:80
               |
               v
-  Privileged forwarding layer
+  root-owned forwarding layer
  (launchd or systemd socket)
               |
               v
@@ -387,108 +309,56 @@ aws-runas broker (developer account)
  AWS authentication and credentials
 ```
 
-### Installed layout
+The service never executes `aws-runas` from a user-writable directory. Setup
+copies the selected executable into a root-owned `libexec` directory, while
+the broker executes with the developer's uid so browser and credential-cache
+state remain user-owned. Privileged components know only the link-local and
+loopback endpoints; they do not read AWS configuration or credentials.
 
-The installer finds the current `aws-runas` executable and installs:
-
-- `aws-metadata` into `/usr/local/bin`
-- the release version into `/usr/local/libexec/aws-metadata-agent/VERSION`
-- a protected copy of `aws-runas` under
-  `/usr/local/libexec/aws-metadata-agent`, executed as the installing user
-- a user LaunchAgent on macOS or user systemd service on Linux
-- a minimal privileged link-local forwarding service
-- a configuration file at `/etc/aws-metadata-agent/config`
-
-### Privilege separation
-
-The service never executes `aws-runas` from a user-writable directory. The
-installer copies the selected binary into its root-owned `libexec` directory
-and uses that absolute path from the service definition. The process itself
-runs with the developer's uid, so cache files and browser authentication stay
-in the developer account. It listens only on `127.0.0.1:18080`.
-
-The installer never installs, stores, or selects an AWS profile. Profiles are
-user-specific and are selected after installation with `aws-metadata use`.
-The installer also does not modify shell startup files and does not initialize
-or publish a Git repository.
-
-### Platform forwarding
-
-On macOS, a small root LaunchDaemon creates the loopback alias and asks launchd
-to own `169.254.169.254:80`. For each accepted connection, launchd runs the
-system `nc` command as `nobody` to connect it to the user broker. On Linux, a
-root oneshot service owns the loopback address and a systemd socket forwards
-port 80 through `systemd-socket-proxyd`. Neither privileged component reads
-AWS configuration or credential files.
-
-Architecture-specific security properties and limitations are documented in
-[docs/security.md](docs/security.md). The broader component and data flow is
-documented in [docs/architecture.md](docs/architecture.md).
+The endpoint is a credential-focused subset of EC2 instance metadata supplied
+by upstream `aws-runas`, not a complete emulation of every EC2 metadata path.
+Upstream supports IMDSv1 and enough of IMDSv2 for credential consumers, but
+does not implement all of IMDSv2's EC2 security properties. See
+[Architecture](docs/architecture.md#protocol-compatibility) and the official
+[Metadata Credential Service](https://mmmorris1975.github.io/aws-runas/metadata_credentials.html)
+documentation before assuming compatibility with a specific application.
 
 ## Maintenance
 
-Use `aws-metadata version` to identify the installed release. See
-[docs/upgrades.md](docs/upgrades.md) for the versioning, in-place upgrade,
-rollback, uninstall, and release policy.
+Identify the installed release with:
 
-### Uninstall
+```sh
+aws-metadata version
+```
 
-For a Homebrew installation, remove service state before the formula:
+For Homebrew, remove privileged service state before the formula:
 
 ```sh
 aws-metadata uninstall
 brew uninstall aws-metadata-agent
 ```
 
-For a source installation:
-
-```sh
-./uninstall.sh
-```
-
-### Security reports
+For a direct or source installation, use `./uninstall.sh` from the matching
+release. Uninstall removes project-owned services, executables, networking,
+and configuration but preserves user-owned AWS profiles, browser state, and
+`aws-runas` caches. See [Upgrades and rollback](docs/upgrades.md) for complete
+method-specific procedures.
 
 Report suspected vulnerabilities privately as described in
 [SECURITY.md](SECURITY.md).
 
-## Operational considerations
-
-### One active profile
-
-EC2 metadata exposes one globally active profile. If a Stream Deck action,
-VS Code, and a coding agent change profiles concurrently, the most recent
-selection wins. See [docs/architecture.md](docs/architecture.md) for the
-planned lease/locking design.
-
-### Containers
-
-The standard metadata endpoint has been validated from Docker Desktop on the
-tested Apple Silicon macOS setup. It also has a recurring credential-free
-Docker Engine check on a GitHub-hosted Ubuntu 24.04 x86_64 runner. The Linux
-check uses Docker's default bridge to reach a host-owned
-`169.254.169.254:80`; it does not add a container route, mount AWS files, pass
-AWS credential environment variables, or configure a custom metadata
-endpoint. This validates the Linux container-routing boundary, not x86_64 as
-an installation host.
-
-Container runtimes and host configurations vary in how they route the reserved
-metadata address. Test the runtime used by your team; a container may need an
-explicit route to the host or may reserve `169.254.169.254` for its own
-metadata proxy. The installer does not change Docker, Podman, or Kubernetes
-networking. Podman and Kubernetes remain unverified and are not part of the
-support claim. See [Container runtime validation](docs/container-runtimes.md)
-for the evidence matrix, Linux test method, and runtime-specific caveats.
-
 ## Development
 
-Run the local, credential-free checks with:
+Run the credential-free checks with:
 
 ```sh
 make test
 ```
 
 The CLI tests use a fake `curl` executable and do not contact AWS or the local
-metadata address.
+metadata address. Development, documentation, sanitization, and pull-request
+guidance lives in [CONTRIBUTING.md](CONTRIBUTING.md); release automation lives
+in [docs/releasing.md](docs/releasing.md).
 
 ## License
 

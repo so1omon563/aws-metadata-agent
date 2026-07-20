@@ -1,143 +1,200 @@
-# Versioning, upgrades, and rollback
+# Upgrades, rollback, and uninstall
 
-## Version source and release tags
+This document covers end-user maintenance. Maintainer tagging, GitHub Release,
+and Homebrew publication automation lives in [Release process](releasing.md).
 
-`VERSION` is the source of truth for the project version. It contains a plain
-semantic version such as `0.1.0`; the matching Git tag is prefixed with `v`,
-for example `v0.1.0`. The `aws-metadata version` command reports the version
-copied into the installed, root-owned service directory.
+## Version and compatibility policy
 
-Only tagged releases are supported installation inputs. The initial `v0.1.0`
-release predates the `VERSION` file; every later release must contain a
-`VERSION` value that exactly matches its tag.
+`VERSION` is the source of truth for the project version, and the matching Git
+tag adds a `v` prefix. `aws-metadata version` reports the release copied into
+the root-owned service directory.
 
-The project follows semantic versioning. While the project is on `0.x`, a
-minor release may contain a breaking change, but the release notes must call it
-out and provide an explicit migration path. After `1.0.0`, breaking changes
-require a major release.
+Only tagged releases are supported installation inputs. The project follows
+semantic versioning. While the project is on `0.x`, a minor release may contain
+a breaking change, but its release notes must identify the change and provide
+a migration path. After `1.0.0`, breaking changes require a major release.
 
-## In-place upgrades
+Before upgrading or rolling back:
 
-Homebrew-managed upgrades use `brew upgrade` followed by an explicit
-`aws-metadata setup` to refresh the root-owned service copy. See
-[homebrew.md](homebrew.md) for the complete package-manager ordering.
+1. Record the installed method and version:
 
-To upgrade a source installation, check out the desired release tag and rerun
+   ```sh
+   command -v aws-metadata
+   aws-metadata version
+   ```
+
+2. Read the target [release notes](https://github.com/so1omon563/aws-metadata-agent/releases)
+   and [changelog](../CHANGELOG.md), especially configuration-schema, installed
+   path, and migration notes.
+3. Keep the current installer or package available until the target is
+   verified.
+
+The root-owned configuration records agent and schema versions. An installer
+rejects a newer unsupported schema rather than silently rewriting it. A
+release that removes, renames, or reinterprets installer state must increment
+the schema and include a tested migration.
+
+Upgrades preserve user-owned `~/.aws` configuration, upstream credential and
+browser caches, and unrelated personal scripts. They do not create, select,
+migrate, or delete an AWS profile.
+
+## Homebrew upgrade
+
+Homebrew owns the package command; native service setup owns the separate
+root-owned copy and definitions. Upgrade both layers explicitly:
+
+```sh
+brew update
+brew upgrade aws-metadata-agent
+aws-metadata setup
+aws-metadata version
+aws-metadata status
+aws-metadata diagnose
+```
+
+`aws-metadata setup` reruns the reviewed installer and refreshes the service
+payload from the package. Reinstalling the same version is supported.
+
+## Direct release upgrade
+
+Download and inspect the current `install-release.sh`, then rerun it with an
+explicit target version:
+
+```sh
+less install-release.sh
+sh ./install-release.sh --version TARGET_VERSION
+aws-metadata version
+aws-metadata status
+aws-metadata diagnose
+```
+
+The helper verifies the target release archive and checksum before invoking
+its installer. It does not bootstrap `aws-runas`; retain the existing upstream
+binary or pass an explicit installer path after a literal `--`.
+
+See [Direct release installation](direct-install.md) for the full supply-chain
+and argument contract.
+
+## Source installation upgrade
+
+Use an exact release tag and inspect the diff or release notes before rerunning
 the installer:
 
 ```sh
 git fetch --tags
-git checkout v0.1.1
+git checkout vTARGET_VERSION
 ./install.sh
+aws-metadata version
+aws-metadata status
+aws-metadata diagnose
 ```
 
-Replace `v0.1.1` with the release being installed. The installer replaces the
-CLI, service executables, copied `aws-runas` binary, service definitions, and
-root-owned configuration in place, then reloads or restarts the services.
-Reinstalling the same version is supported.
+The installer replaces the CLI when it owns it, service executables, copied
+`aws-runas`, service definitions, and root-owned configuration in place, then
+reloads or restarts the native services.
 
-An upgrade preserves user-owned AWS configuration and `aws-runas` cache files.
-On Linux it also preserves the pre-install systemd linger state so uninstall
-can restore it correctly. The installer never creates, selects, migrates, or
-deletes an AWS profile.
+## Confirm the upgraded identity path
 
-The root-owned configuration records both `AWS_METADATA_AGENT_VERSION` and
-`AWS_METADATA_CONFIG_VERSION`. Configuration schema 1 contains only installer
-state: the target account and paths, local port, copied executable path, and
-the original Linux linger state. It does not contain AWS credentials or
-profiles.
+Healthy service state alone does not prove that a consumer is using metadata.
+After reselecting an upstream profile, repeat the provider-isolated identity
+verification from [Getting started](getting-started.md#5-prove-an-aws-client-uses-metadata).
 
-Additive schema changes may use an existing schema version when older
-executables safely ignore them. A change that removes, renames, or reinterprets
-state must increment the schema version and include a tested installer
-migration. An installer must reject an unsupported newer schema rather than
-silently rewriting it. A destructive migration requires a breaking release as
-defined above.
-
-## Rollback and uninstall
-
-There is no automatic rollback. If the prior release uses a compatible
-configuration schema, check out its tag and rerun its installer. If schemas or
-installed paths are incompatible, use the current release's `uninstall.sh`
-first, then install the older release from a clean checkout.
-
-Uninstall stops and removes the user broker and privileged forwarding
-services, removes project-owned executables and configuration, and restores
-the Linux linger state when the project originally enabled it. It leaves
-user-owned AWS configuration, profiles, browser-authentication state, and
-unrelated personal scripts untouched.
-
-When moving between a package-manager installation and a source installation,
-run the agent's privileged uninstall before removing the package payload. The
-Homebrew-specific ordering is documented in [homebrew.md](homebrew.md).
-
-## Release checklist
-
-Normal releases move through a dedicated pull request. Start from a clean
-branch based on current `main`, confirm that `CHANGELOG.md` has complete
-`Unreleased` entries, and stage the release metadata:
+The active profile is process state and is normally cleared when setup restarts
+the broker. Reselect it after an upgrade:
 
 ```sh
-make stage-release BUMP=patch
-make test
+aws-metadata use example-nonprod
 ```
 
-Use `minor` or `major` only when the release scope requires it. The staging
-command fetches tags, derives the next version from the latest stable tag,
-updates `VERSION`, moves the non-empty `Unreleased` entries into a dated
-release section, and prints the required pull-request title. It refuses a dirty
-working tree, an empty changelog, an existing tag, or a version inconsistent
-with the requested bump.
+## Recover from a failed upgrade
 
-The release PR title must contain exactly one of `#patch`, `#minor`, or
-`#major`. Add `#release`, `#publish`, or `#ship` when merging the PR should also
-publish the GitHub Release. For example:
+1. Preserve the exact error and run `aws-metadata diagnose`.
+2. Rerun the same package setup or matching release installer. Same-version
+   reinstall is supported and repairs service payloads and definitions.
+3. If the endpoint answers but authentication fails, use
+   `aws-metadata errors`; do not mistake a broker error for a failed install.
+4. If clean removal is necessary, use the current method's uninstaller before
+   attempting a different installation method.
 
-```text
-Prepare release 0.2.1 #patch #release
+Do not manually remove isolated root-owned files or service definitions unless
+the matching uninstaller is unavailable and the complete layout has been
+reviewed. Manual partial cleanup can leave networking, service-manager, or
+package ownership inconsistent.
+
+## Rollback
+
+There is no automatic rollback. Confirm target compatibility in the release
+notes before changing versions.
+
+### Homebrew-managed installation
+
+The tap publishes the current supported formula rather than a catalog of every
+historical version. A rollback therefore changes ownership temporarily from
+Homebrew to a tagged direct/source installation:
+
+```sh
+aws-metadata uninstall
+brew uninstall aws-metadata-agent
 ```
 
-The squash or merge commit message must retain those markers. The pre-tag
-validation and semantic-version action both read the checked-out merge commit,
-so editing the final message to remove or change a marker fails before any tag
-is created.
+Then install the reviewed older tag with its direct-release helper or source
+installer. Keep the tap installed if you intend to return to Homebrew later.
 
-After the release PR merges, `.github/workflows/bump.yml`:
+To return to Homebrew, run the older release's `./uninstall.sh`, then:
 
-1. validates that the staged `VERSION` and changelog match the merge-commit
-   marker;
-2. uses `so1omon563/custom-semver-bumper@v1` to create the matching tag on the
-   merged default-branch commit;
-3. creates a deterministic `aws-metadata-agent-vVERSION.tar.gz` from that tag
-   and its matching `.sha256` file;
-4. uses `so1omon563/release-creator@v1` to publish grouped release notes and
-   upload both verified assets when a release marker is present.
+```sh
+brew install aws-metadata-agent
+aws-metadata setup
+```
 
-The downstream Homebrew workflow downloads and verifies those assets, updates
-the separate tap formula to the release-asset URL and checksum, runs the
-formula's strict audit, install, and tests, and opens a protected tap pull
-request. It waits for the tap checks before squash-merging the update. The
-parent repository must contain a `PACKAGING_PR_TOKEN` Actions secret backed by
-a fine-grained token with access only to
-`so1omon563/homebrew-aws-metadata-agent` and permission to write contents and
-pull requests and read Actions and commit statuses.
+Do not leave both source-owned `/usr/local/bin/aws-metadata` and a
+package-managed command as competing installations. Setup contains migration
+handling for the known legacy source path, but installation ownership should
+remain explicit.
 
-The Homebrew workflow also supports manual dispatch with an existing release
-tag. Use that fallback to retry tap publication without creating another tag
-or GitHub Release.
+### Direct or source installation
 
-Every release still requires the following evidence:
+If the earlier release uses a compatible schema and layout, install that exact
+tag with its verified helper or rerun its source installer. If the release
+notes describe incompatibility, run the current release's uninstaller first,
+then install the older version from clean state.
 
-1. The credential-free suite and hosted platform CI pass.
-2. For installer-affecting changes, upgrade a supported host from the
-   immediately previous release and verify version reporting, service health,
-   metadata access, restart persistence, and uninstall. Skipped-version
-   upgrades are best effort unless the release notes promise otherwise.
-3. Committed fixtures, logs, documentation, and release notes contain no AWS
-   credentials, account IDs, profile names, identity output, or private
-   infrastructure details.
-4. The published tag, GitHub Release, archive, checksum, and Homebrew formula
-   all report the same version.
-5. Download the two public release assets, verify their checksum, and exercise
-   `install-release.sh --version VERSION -- --help` without installing service
-   state.
+## Uninstall
+
+### Homebrew
+
+Remove service state before the package payload:
+
+```sh
+aws-metadata uninstall
+brew uninstall aws-metadata-agent
+```
+
+If Homebrew was removed first, reinstall the formula and run
+`aws-metadata uninstall`, or obtain `uninstall.sh` from the matching tagged
+release.
+
+### Direct or source
+
+From the matching release directory:
+
+```sh
+./uninstall.sh
+```
+
+Uninstall stops and removes the user broker and privileged forwarding,
+project-owned executables, native definitions, link-local state, and root-owned
+configuration. On Linux it restores the prior linger state when the project
+originally enabled lingering.
+
+User-owned AWS configuration, profile definitions, browser-authentication
+state, upstream credential caches, and unrelated scripts are preserved.
+
+## Related documentation
+
+- [Homebrew installation](homebrew.md)
+- [Direct release installation](direct-install.md)
+- [Troubleshooting](troubleshooting.md)
+- [Release process](releasing.md)
+
+[Back to the documentation index](README.md) | [Back to the project README](../README.md)

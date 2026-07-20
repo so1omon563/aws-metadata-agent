@@ -5,6 +5,7 @@ BUMP ?= patch
 
 test:
 	$(PYTHON) scripts/check_release.py
+	$(PYTHON) scripts/check_docs.py
 	./tests/syntax.sh
 	./tests/bootstrap.sh
 	./tests/cli.sh

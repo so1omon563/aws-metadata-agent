@@ -2,7 +2,8 @@
 
 `aws-metadata-agent` exposes profiles that are configured and authenticated by
 `aws-runas`. It does not create profiles or replace the upstream configuration
-model.
+model. Start with one upstream profile that works directly; add the metadata
+service only after that boundary succeeds.
 
 The official [aws-runas documentation](https://mmmorris1975.github.io/aws-runas/)
 is authoritative. When this guide is incomplete, ambiguous, or differs from
@@ -15,6 +16,34 @@ The examples below use the attributes documented for the project's supported
 replace angle-bracketed values with configuration supplied by the people who
 manage your AWS accounts and identity provider. Never commit credentials or
 real identity-provider details to this repository.
+
+## Start here
+
+If an upstream profile already works, list the standard AWS profile names and
+test the intended role directly:
+
+```sh
+aws configure list-profiles
+aws-runas -r example-nonprod /usr/bin/true
+printf 'exit=%s\n' "$?"
+```
+
+Exit `0` confirms that upstream can obtain credentials. Skip to
+[Select and use a profile](#select-and-use-a-profile).
+
+If no upstream profile works yet, choose the relevant IAM, SAML, or OIDC
+pattern below, then follow the linked official guide for the complete
+configuration. The snippets are illustrative shapes, not copy-paste account
+configuration.
+
+Keep the three profile concepts distinct:
+
+- an **upstream profile** in `~/.aws/config` defines authentication and role
+  assumption;
+- the **active agent profile** is the one upstream profile selected globally
+  by `aws-metadata use`; and
+- an optional **consumer compatibility profile** such as `local-metadata`
+  tells a profile-oriented application to read the current metadata identity.
 
 ## Ownership boundary
 
@@ -53,59 +82,6 @@ set of supported IAM attributes.
 
 Named profiles in `~/.aws/config` use the standard `[profile NAME]` section
 form. The name after `profile` is the value passed to `aws-metadata use`.
-
-## Named metadata profile for profile-oriented tools
-
-Some integrations require the user to select a named AWS profile instead of
-using the default credential provider chain directly. The AWS Toolkit for
-Visual Studio Code is one example. A dedicated consumer-side profile can point
-those tools at the standard EC2 metadata provider:
-
-```ini
-[profile local-metadata]
-region = us-west-2
-credential_source = Ec2InstanceMetadata
-```
-
-This profile and an `aws-runas` profile serve different purposes:
-
-- `aws-metadata use example-iam` selects the real upstream profile whose
-  credentials the broker exposes;
-- `--profile local-metadata` tells a profile-oriented consumer to retrieve the
-  currently exposed credentials from EC2 metadata.
-
-For example, after selecting the upstream profile:
-
-```sh
-aws-metadata use example-iam
-aws --profile local-metadata sts get-caller-identity
-```
-
-Select `local-metadata` in the AWS Toolkit for Visual Studio Code for the same
-reason. The consumer profile does not select or lock an `aws-runas` profile,
-and it does not correspond one-to-one with an AWS role. If another caller
-changes the agent's active profile, the consumer receives credentials for the
-new active profile.
-
-No custom endpoint is required because `aws-metadata-agent` exposes the
-standard `169.254.169.254` address. Applications that already use the default
-credential provider chain do not need this named profile. Standalone
-`credential_source` is intentionally used here as a consumer compatibility
-profile, not as an assume-role profile. AWS primarily documents the setting as
-an [assume-role credential source], but the [Toolkit credential provider]
-explicitly maps the standalone `Ec2InstanceMetadata` value to its instance
-metadata provider, and AWS CLI v2 continues through its credential chain to
-IMDS. Do not add a `role_arn` merely to complete this consumer profile: that
-would ask the consumer to assume another role after retrieving the credentials
-already selected through `aws-metadata-agent`. Behavior may vary among other
-SDKs and tools; use this pattern only for integrations known to support it and
-test the specific integration.
-
-See the AWS documentation for
-[Toolkit credential profiles](https://docs.aws.amazon.com/toolkit-for-vscode/latest/userguide/setup-credentials.html)
-and the
-[EC2 instance metadata credential source](https://docs.aws.amazon.com/sdkref/latest/guide/feature-assume-role-credentials.html)
-for the underlying shared-configuration concepts.
 
 ## IAM role profile
 
@@ -197,6 +173,58 @@ For upstream details about the EC2-compatible service itself, see the official
 [Metadata Credential Service](https://mmmorris1975.github.io/aws-runas/metadata_credentials.html)
 documentation.
 
+## Named metadata profile for profile-oriented tools
+
+Some integrations require the user to select a named AWS profile instead of
+using the default credential provider chain directly. The AWS Toolkit for
+Visual Studio Code is one example. A dedicated consumer compatibility profile
+can point those tools at the standard EC2 metadata provider:
+
+```ini
+[profile local-metadata]
+region = us-west-2
+credential_source = Ec2InstanceMetadata
+```
+
+This profile and an upstream `aws-runas` profile serve different purposes:
+
+- `aws-metadata use example-iam` selects the real upstream profile whose
+  credentials the broker exposes;
+- `--profile local-metadata` tells a profile-oriented consumer to retrieve the
+  currently exposed credentials from EC2 metadata.
+
+For example, after selecting the upstream profile:
+
+```sh
+aws-metadata use example-iam
+aws --profile local-metadata sts get-caller-identity
+```
+
+Select `local-metadata` in the AWS Toolkit for Visual Studio Code for the same
+reason. The consumer profile does not select or lock an upstream profile, and
+it does not correspond one-to-one with an AWS role. If another caller changes
+the active agent profile, the consumer receives credentials for the new active
+profile.
+
+No custom endpoint is required because `aws-metadata-agent` exposes the
+standard `169.254.169.254` address. Applications that already use the default
+credential provider chain do not need this named profile. Standalone
+`credential_source` is intentionally used here as a consumer compatibility
+profile, not as an assume-role profile. AWS primarily documents the setting as
+an [assume-role credential source], but the [Toolkit credential provider]
+explicitly maps the standalone `Ec2InstanceMetadata` value to its instance
+metadata provider, and AWS CLI v2 continues through its credential chain to
+IMDS. Do not add a `role_arn` merely to complete this consumer profile: that
+would ask the consumer to assume another role after retrieving the credentials
+already selected through `aws-metadata-agent`. Behavior may vary among other
+SDKs and tools; test the specific integration.
+
+See [Consumer recipes](consumers.md#profile-oriented-consumers), the AWS
+documentation for
+[Toolkit credential profiles](https://docs.aws.amazon.com/toolkit-for-vscode/latest/userguide/setup-credentials.html),
+and the
+[EC2 instance metadata credential source](https://docs.aws.amazon.com/sdkref/latest/guide/feature-assume-role-credentials.html).
+
 ## Custom setups
 
 Custom configurations should preserve the same ownership boundary: define and
@@ -249,12 +277,6 @@ for shared source-profile behavior and the
 [SAML Client Configuration Guide](https://mmmorris1975.github.io/aws-runas/saml_client_config.html)
 for Azure AD and browser-provider configuration.
 
-Project-specific examples belong here only when they add an integration pattern
-that is not already clear in the upstream documentation. Sanitize profile
-names, account and identity details, role and MFA ARNs, client IDs, endpoints,
-and all credentials before publishing an example. Link each example to the
-upstream guide that defines the underlying attributes.
-
 ## Official references
 
 - [aws-runas documentation](https://mmmorris1975.github.io/aws-runas/)
@@ -270,3 +292,12 @@ upstream guide that defines the underlying attributes.
 
 [assume-role credential source]: https://docs.aws.amazon.com/sdkref/latest/guide/feature-assume-role-credentials.html
 [Toolkit credential provider]: https://github.com/aws/aws-toolkit-vscode/blob/master/packages/core/src/auth/providers/sharedCredentialsProvider.ts
+
+## Related documentation
+
+- [Getting started](getting-started.md)
+- [Consumer recipes](consumers.md)
+- [Troubleshooting](troubleshooting.md)
+- [Documentation contribution policy](../CONTRIBUTING.md#documentation-examples)
+
+[Back to the documentation index](README.md) | [Back to the project README](../README.md)

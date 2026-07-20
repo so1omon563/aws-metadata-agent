@@ -4,9 +4,15 @@ An Elgato Stream Deck key can select an AWS profile by invoking the packaged
 `aws-metadata` CLI directly. This does not require a wrapper script, a terminal
 window, or direct requests to the metadata HTTP API.
 
+The action changes the one globally active agent profile. Every host
+application and reachable container sees the latest successful selection; a
+Stream Deck key does not reserve a profile for one application.
+
 ## Prerequisites
 
-- macOS with `aws-metadata-agent` installed, configured, and running
+- macOS with `aws-metadata-agent` [installed](homebrew.md),
+  [configured](aws-runas-configuration.md), and
+  [running](getting-started.md#3-verify-native-service-state)
 - Elgato Stream Deck 6.9 or later
 - The free
   [Mac Automation plugin](https://marketplace.elgato.com/product/mac-automation-8468fc12-644b-427a-84cb-127c82c5bb30)
@@ -25,6 +31,12 @@ documents the action and additional examples.
 
    ```sh
    command -v aws-metadata
+   ```
+
+   Confirm the upstream profile name before adding it to a key:
+
+   ```sh
+   aws configure list-profiles
    ```
 
 5. Set the key's command to that absolute path followed by the profile
@@ -96,8 +108,8 @@ successful response resembles:
 }
 ```
 
-See the [`profile` exit-code table](../README.md#usage) for the complete command
-contract.
+See the [`profile` exit-code table](cli-reference.md#profile-exit-codes) for
+the complete command contract.
 
 ## Verify the action
 
@@ -111,6 +123,10 @@ Then select a different profile, press the configured physical Stream Deck
 key, and verify that metadata consumers use the expected profile. Remember
 that the metadata endpoint has one globally active profile: the most recent
 successful selection wins.
+
+Avoid rapid repeated presses or conflicting profile keys. Stream Deck does not
+display the JSON result, the agent does not implement a per-key lock, and a
+later successful action can replace the identity selected by an earlier one.
 
 ## Troubleshooting
 
@@ -153,7 +169,7 @@ macOS assigns the GUI session a private `TMPDIR`. Keep diagnostic output there
 rather than at a predictable path directly under the shared `/tmp` directory.
 
 For agent-side failures, continue with the bounded diagnostics in
-[Troubleshooting profile selection](../README.md#troubleshooting-profile-selection).
+[Troubleshooting](troubleshooting.md).
 
 ## Security considerations
 
@@ -166,3 +182,12 @@ For agent-side failures, continue with the bounded diagnostics in
   flow.
 - Treat temporary logs as local diagnostic material and delete them when the
   investigation is complete.
+
+## Related documentation
+
+- [CLI reference](cli-reference.md)
+- [Consumer recipes](consumers.md#gui-and-command-automation)
+- [Troubleshooting](troubleshooting.md)
+- [Security model](security.md)
+
+[Back to the documentation index](README.md) | [Back to the project README](../README.md)
