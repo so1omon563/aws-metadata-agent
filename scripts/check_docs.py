@@ -140,6 +140,16 @@ def validate_reader_contract(root: Path) -> None:
             "aws-runas configuration still contains contributor example policy"
         )
 
+    troubleshooting = (root / "docs/troubleshooting.md").read_text(encoding="utf-8")
+    linux_service_status = (
+        "systemctl status aws-metadata-agent-address.service aws-metadata-agent.socket \\\n"
+        "  aws-metadata-agent.service"
+    )
+    if linux_service_status not in troubleshooting:
+        raise DocsError(
+            "docs/troubleshooting.md omits the Linux system proxy service status"
+        )
+
 
 def main() -> int:
     root = Path.cwd().resolve()

@@ -36,7 +36,8 @@ macOS, complete forwarder errors are in
 user broker separately:
 
 ```sh
-systemctl status aws-metadata-agent-address.service aws-metadata-agent.socket
+systemctl status aws-metadata-agent-address.service aws-metadata-agent.socket \
+  aws-metadata-agent.service
 systemctl --user status aws-metadata-agent.service
 ```
 
