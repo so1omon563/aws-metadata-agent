@@ -7,6 +7,11 @@ All notable changes to this project are documented here. Changes remain under
 
 ### Added
 
+- Actionable profile-selection failures and a bounded, redacted
+  `aws-metadata errors` command that classifies recent broker authentication
+  failures without printing raw sensitive log lines.
+- Direct Stream Deck and GUI automation guidance using the package-managed
+  `aws-metadata` CLI, without a wrapper script or terminal window.
 - First-class zsh, Bash, and fish PATH and completion setup through
   `bootstrap.sh --configure-shell`, including reviewed completion integrity,
   isolated-shell regression coverage, and unsupported-shell no-op behavior.
