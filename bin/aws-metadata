@@ -528,13 +528,13 @@ recent_broker_error_lines() {
   case "$(uname -s)" in
     Darwin)
       command tail -n 200 "$(broker_log_location)" |
-        command grep -F 'handleAuthError:' |
+        command awk 'index($0, "handleAuthError:")' |
         command tail -n 10
       ;;
     Linux)
       command journalctl --user-unit aws-metadata-agent.service \
         --lines 200 --no-pager -o cat 2>/dev/null |
-        command grep -F 'handleAuthError:' |
+        command awk 'index($0, "handleAuthError:")' |
         command tail -n 10
       ;;
     *)
@@ -544,7 +544,7 @@ recent_broker_error_lines() {
 }
 
 errors_command() {
-  local line count=0 log_location
+  local line lines count=0 log_location
 
   if (($#)); then
     printf 'Unknown errors option: %s\n' "$1" >&2
@@ -571,10 +571,17 @@ errors_command() {
       ;;
   esac
 
-  while IFS= read -r line; do
-    printf -- '- %s\n' "$(broker_error_summary "$line")"
-    count=$((count + 1))
-  done < <(recent_broker_error_lines)
+  if ! lines=$(recent_broker_error_lines); then
+    printf 'Unable to read the broker log from %s.\n' "$log_location" >&2
+    return 1
+  fi
+
+  if [[ -n $lines ]]; then
+    while IFS= read -r line; do
+      printf -- '- %s\n' "$(broker_error_summary "$line")"
+      count=$((count + 1))
+    done <<<"$lines"
+  fi
 
   if ((count == 0)); then
     printf '%s\n' \

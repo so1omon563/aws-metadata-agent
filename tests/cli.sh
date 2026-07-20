@@ -177,6 +177,15 @@ case $(uname -s) in
     ;;
   Linux)
     errors_output=$(MOCK_JOURNAL_OUTPUT="$BROKER_ERROR_FIXTURE" "$CLI" errors)
+    journal_error_exit=0
+    journal_error_output=$(MOCK_JOURNAL_EXIT=1 "$CLI" errors 2>&1) || \
+      journal_error_exit=$?
+    if [[ $journal_error_exit -ne 1 ]] ||
+       [[ $journal_error_output != *'Unable to read the broker log'* ]] ||
+       [[ $journal_error_output == *'No broker authentication errors'* ]]; then
+      printf 'Unexpected journal read failure: %s\n' "$journal_error_output" >&2
+      exit 1
+    fi
     ;;
   *)
     printf '%s\n' 'Unsupported test platform.' >&2

@@ -5,3 +5,5 @@ set -u
 if [[ -n ${MOCK_JOURNAL_OUTPUT:-} ]]; then
   command cat "$MOCK_JOURNAL_OUTPUT"
 fi
+
+exit "${MOCK_JOURNAL_EXIT:-0}"
