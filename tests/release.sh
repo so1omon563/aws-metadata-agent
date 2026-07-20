@@ -42,6 +42,9 @@ cat >"$repo/docs/direct-install.md" <<'EOF'
 version=0.2.0
 sh ./install-release.sh --version 0.2.0
 EOF
+cat >"$repo/README.md" <<'EOF'
+version=0.2.0
+EOF
 cat >"$repo/install-release.sh" <<'EOF'
 Examples:
   ./install-release.sh --version 0.2.0
@@ -64,6 +67,7 @@ grep -Fq '[0.2.1]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.2
   "$repo/CHANGELOG.md"
 grep -Fq 'version=0.2.1' "$repo/docs/direct-install.md"
 grep -Fq -- '--version 0.2.1' "$repo/docs/direct-install.md"
+grep -Fq 'version=0.2.1' "$repo/README.md"
 grep -Fq -- '--version 0.2.1' "$repo/install-release.sh"
 python3 "$repo/scripts/check_release.py" --root "$repo" --bump patch >/dev/null
 
@@ -78,7 +82,7 @@ printf '%s\n' \
   'sh ./install-release.sh --version 0.2.1' \
   >"$repo/docs/direct-install.md"
 
-git -C "$repo" add VERSION CHANGELOG.md docs/direct-install.md install-release.sh
+git -C "$repo" add VERSION CHANGELOG.md README.md docs/direct-install.md install-release.sh
 git -C "$repo" commit -qm release
 git -C "$repo" tag v0.2.1
 AWS_METADATA_RELEASE_DIST_DIR="$TEMP_ROOT/dist" \

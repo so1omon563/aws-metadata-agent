@@ -13,6 +13,21 @@ All notable changes to this project are documented here. Changes remain under
 - Recurring Docker Engine default-bridge validation on a GitHub-hosted Ubuntu
   24.04 runner, with an immutable credential-free fixture and documented
   container-runtime evidence boundaries.
+- End-user documentation organized around suitability, trust boundaries,
+  supported installation, upstream profile validation, expected no-profile
+  state, provider-isolated AWS identity verification, consumer integration,
+  troubleshooting, lifecycle, and maintenance.
+- Dedicated documentation index, getting-started guide, CLI reference,
+  consumer recipes, troubleshooting guide, contributor guide, and maintainer
+  release process.
+
+### Changed
+
+- User upgrade and rollback procedures are separated from release automation;
+  architecture and security guides now own detailed topology, IMDS
+  compatibility, threat assumptions, state lifetime, and failure behavior.
+- Release preparation now keeps the README's pinned Linux quick-start version
+  synchronized with direct-install and helper examples.
 
 ## [0.2.2] - 2026-07-17
 

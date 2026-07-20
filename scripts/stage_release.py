@@ -23,6 +23,7 @@ CURRENT_RELEASE_REFERENCE_RE = re.compile(
     re.MULTILINE,
 )
 CURRENT_RELEASE_REFERENCE_FILES = (
+    Path("README.md"),
     Path("docs/direct-install.md"),
     Path("install-release.sh"),
 )
