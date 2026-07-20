@@ -183,28 +183,45 @@ prints the upstream source, and retains the upstream MIT attribution in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 The default bootstrap destination is `$HOME/.local/bin`. If that directory is
-not in `PATH`, the command prints the exact zsh configuration line to add. It
-does not modify shell startup files.
+not in `PATH`, the command prints a configuration hint for the current login
+shell. It does not modify shell startup files.
 
-To configure zsh explicitly and idempotently:
+To configure the detected zsh, Bash, or fish login shell explicitly and
+idempotently:
 
 ```sh
 ./bootstrap.sh --configure-shell
 ```
 
-This adds managed blocks to `~/.zprofile` for PATH and `~/.zshrc` for
-completion, then installs the upstream completion under
-`~/.local/share/aws-runas`. Existing content outside those marked blocks is
-preserved. Shell files are never modified without `--configure-shell`.
+The configured files depend on `$SHELL` and the host platform:
+
+| Login shell | PATH configuration | Completion configuration |
+| --- | --- | --- |
+| zsh | managed block in `~/.zprofile` | managed block in `~/.zshrc`; verified upstream file under `~/.local/share/aws-runas` |
+| Bash on macOS | managed block in the first existing login file: `~/.bash_profile`, `~/.bash_login`, or `~/.profile`; defaults to `~/.bash_profile` | same file; verified upstream file under `~/.local/share/aws-runas` |
+| Bash on Linux | managed block in `~/.bashrc` | same file; verified upstream file under `~/.local/share/aws-runas` |
+| fish | `$XDG_CONFIG_HOME/fish/conf.d/aws-metadata-agent.fish`, defaulting to `~/.config/fish/conf.d/aws-metadata-agent.fish` | `$XDG_CONFIG_HOME/fish/completions/aws-runas.fish`, defaulting to `~/.config/fish/completions/aws-runas.fish` |
+
+The fish completion is native fish code tied to the supported `aws-runas`
+command surface. It does not source or translate the upstream Bash or zsh
+scripts. Unsupported login shells receive a clear message and no shell files
+are changed.
+
+Existing content outside the managed blocks and existing file modes are
+preserved. Symlinked startup files remain symlinks and their targets receive the
+managed blocks. Rerunning the command replaces each managed block without
+creating duplicates. Shell files are never modified without
+`--configure-shell`.
 
 Existing hand-written `aws-runas` configuration outside the managed blocks is
 never removed. Bootstrap warns when it detects such configuration so the user
 can review possible duplicate completion loading.
 
 Because completion files are sourced as shell code, the bootstrapper records
-and verifies a reviewed SHA-256 checksum for each supported completion version.
-It refuses to configure completion for an unreviewed version even if that
-version's binary can be downloaded successfully.
+and verifies reviewed SHA-256 checksums for the official upstream Bash and zsh
+files and the project-owned native fish file. It refuses to configure
+completion for an unreviewed version even if that version's binary can be
+downloaded successfully.
 
 ### Configure aws-runas
 

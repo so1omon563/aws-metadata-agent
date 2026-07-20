@@ -17,6 +17,7 @@ for script in \
   "$PROJECT_DIR/scripts/wait_for_pr_check.sh" \
   "$PROJECT_DIR/uninstall.sh" \
   "$PROJECT_DIR/tests/cli.sh" \
+  "$PROJECT_DIR/tests/bootstrap.sh" \
   "$PROJECT_DIR/tests/layout.sh" \
   "$PROJECT_DIR/tests/pr-check-wait.sh" \
   "$PROJECT_DIR/tests/release.sh" \
@@ -28,6 +29,10 @@ for script in \
 done
 
 sh -n "$PROJECT_DIR/install-release.sh"
+
+if command -v fish >/dev/null 2>&1; then
+  fish -n "$PROJECT_DIR/completions/aws-runas.fish"
+fi
 
 if command -v plutil >/dev/null 2>&1; then
   plutil -lint \

@@ -3,9 +3,12 @@
 set -eu
 set -o pipefail
 
+PROJECT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+readonly PROJECT_DIR
 readonly UPSTREAM_REPOSITORY=https://github.com/mmmorris1975/aws-runas
 version=${AWS_RUNAS_VERSION:-3.9.0}
 install_dir=${AWS_RUNAS_INSTALL_DIR:-${HOME}/.local/bin}
+fish_completion_source=${AWS_RUNAS_FISH_COMPLETION_SOURCE:-$PROJECT_DIR/completions/aws-runas.fish}
 dry_run=false
 configure_shell=false
 
@@ -14,7 +17,16 @@ replace_managed_block() {
   local start_marker=$2
   local end_marker=$3
   local content=$4
-  local file_dir temporary_file file_mode
+  local file_dir temporary_file file_mode symlink_target
+
+  while [[ -L $file ]]; do
+    symlink_target=$(readlink "$file")
+    if [[ $symlink_target == /* ]]; then
+      file=$symlink_target
+    else
+      file=$(dirname "$file")/$symlink_target
+    fi
+  done
 
   file_dir=$(dirname "$file")
   mkdir -p "$file_dir"
@@ -35,68 +47,181 @@ replace_managed_block() {
     chmod 0644 "$temporary_file"
   fi
 
-  printf '\n%s\n%s\n%s\n' \
+  printf '%s\n%s\n%s\n' \
     "$start_marker" "$content" "$end_marker" >>"$temporary_file"
   mv "$temporary_file" "$file"
 }
 
-configure_zsh() {
-  local completion_dir completion_path completion_url completion_download
-  local completion_checksum completion_expected_checksum
-  local path_line completion_block install_relative completion_relative
-  local path_start path_end completion_start completion_end
+detect_login_shell() {
+  case ${SHELL:-} in
+    */zsh|zsh) printf '%s' zsh ;;
+    */bash|bash) printf '%s' bash ;;
+    */fish|fish) printf '%s' fish ;;
+    *) printf '%s' unsupported ;;
+  esac
+}
 
-  if [[ ${SHELL:-} != */zsh ]]; then
-    printf '%s\n' 'The current login shell is not zsh; shell files were not modified.' >&2
-    return 0
+checksum_file() {
+  if [[ $checksum_command == sha256sum ]]; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
   fi
+}
 
-  completion_dir=$HOME/.local/share/aws-runas
-  completion_path=$completion_dir/aws-runas-zsh-completion
-  completion_url="https://raw.githubusercontent.com/mmmorris1975/aws-runas/${version}/extras/aws-runas-zsh-completion"
-  completion_download=$temporary_dir/aws-runas-zsh-completion
+reviewed_upstream_completion_checksum() {
+  local shell_name=$1
+
+  case "$version:$shell_name" in
+    3.9.0:bash)
+      printf '%s' 0d5b208644aa53e55a7200cab9fc82db7be8334b8e803f58f7db77db55ab370e
+      ;;
+    3.9.0:zsh)
+      printf '%s' ef28853bfd267e09f4eb3b2335581294ad12099daa4a27fe3290e76259f16dec
+      ;;
+    *)
+      printf 'No reviewed %s completion checksum is recorded for aws-runas %s.\n' \
+        "$shell_name" "$version" >&2
+      printf '%s\n' \
+        'The binary was installed, but shell completion was not configured.' >&2
+      return 1
+      ;;
+  esac
+}
+
+install_upstream_completion() {
+  local shell_name=$1
+  local completion_path=$2
+  local completion_name completion_url completion_download
+  local completion_checksum completion_expected_checksum
+
+  completion_name=aws-runas-${shell_name}-completion
+  completion_url="https://raw.githubusercontent.com/mmmorris1975/aws-runas/${version}/extras/${completion_name}"
+  completion_download=$temporary_dir/$completion_name
 
   curl --proto '=https' --tlsv1.2 --fail --location --show-error --silent \
     --output "$completion_download" "$completion_url"
-  if [[ ! -s $completion_download ]] || ! grep -q 'compdef.*PROG' "$completion_download"; then
-    printf '%s\n' 'The upstream zsh completion file failed validation.' >&2
-    exit 1
+  case $shell_name in
+    bash)
+      if [[ ! -s $completion_download ]] || \
+         ! grep -q '_cli_bash_autocomplete' "$completion_download" || \
+         ! grep -q 'complete .*_cli_bash_autocomplete' "$completion_download"; then
+        printf '%s\n' 'The upstream Bash completion file failed validation.' >&2
+        return 1
+      fi
+      ;;
+    zsh)
+      if [[ ! -s $completion_download ]] || \
+         ! grep -q 'compdef.*PROG' "$completion_download"; then
+        printf '%s\n' 'The upstream zsh completion file failed validation.' >&2
+        return 1
+      fi
+      ;;
+  esac
+
+  completion_expected_checksum=$(
+    reviewed_upstream_completion_checksum "$shell_name"
+  ) || return
+  completion_checksum=$(checksum_file "$completion_download")
+  if [[ $completion_checksum != "$completion_expected_checksum" ]]; then
+    printf 'The upstream %s completion checksum did not match; refusing to source it.\n' \
+      "$shell_name" >&2
+    return 1
   fi
+
+  install -d -m 0755 "$(dirname "$completion_path")"
+  install -m 0644 "$completion_download" "$completion_path"
+}
+
+review_fish_completion() {
+  local expected_checksum actual_checksum
 
   case $version in
     3.9.0)
-      completion_expected_checksum=ef28853bfd267e09f4eb3b2335581294ad12099daa4a27fe3290e76259f16dec
+      expected_checksum=e130bc795ccc2d54e11070ec965523a2b6d24a527c36bb0ae192f8d6e3d23db2
       ;;
     *)
-      printf 'No reviewed zsh completion checksum is recorded for aws-runas %s.\n' \
+      printf 'No reviewed native fish completion is recorded for aws-runas %s.\n' \
         "$version" >&2
-      printf '%s\n' 'The binary was installed, but shell completion was not configured.' >&2
-      exit 1
+      printf '%s\n' \
+        'The binary was installed, but shell completion was not configured.' >&2
+      return 1
       ;;
   esac
-  if [[ $checksum_command == sha256sum ]]; then
-    completion_checksum=$(sha256sum "$completion_download" | awk '{print $1}')
-  else
-    completion_checksum=$(shasum -a 256 "$completion_download" | awk '{print $1}')
+  if [[ ! -f $fish_completion_source || -L $fish_completion_source ]]; then
+    printf 'The reviewed native fish completion is missing at %s.\n' \
+      "$fish_completion_source" >&2
+    return 1
   fi
-  if [[ $completion_checksum != "$completion_expected_checksum" ]]; then
-    printf '%s\n' 'The upstream zsh completion checksum did not match; refusing to source it.' >&2
-    exit 1
+  actual_checksum=$(checksum_file "$fish_completion_source")
+  if [[ $actual_checksum != "$expected_checksum" ]]; then
+    printf '%s\n' \
+      'The native fish completion checksum did not match the reviewed source.' >&2
+    return 1
   fi
-  install -d -m 0755 "$completion_dir"
-  install -m 0644 "$completion_download" "$completion_path"
+}
+
+posix_path_line() {
+  local install_relative
 
   install_relative=${install_dir#"$HOME"}
-  completion_relative=${completion_path#"$HOME"}
   if [[ $install_dir == "$HOME"/* ]]; then
     # $HOME and $PATH are intentionally written literally for future sessions.
     # shellcheck disable=SC2016
-    printf -v path_line 'export PATH="$HOME"%q:"$PATH"' "$install_relative"
+    printf 'export PATH="$HOME"%q:"$PATH"' "$install_relative"
   else
     # $PATH is intentionally written literally for future sessions.
     # shellcheck disable=SC2016
-    printf -v path_line 'export PATH=%q:"$PATH"' "$install_dir"
+    printf 'export PATH=%q:"$PATH"' "$install_dir"
   fi
+}
+
+fish_quote() {
+  local value=$1
+
+  value=${value//\\/\\\\}
+  value=${value//\'/\\\'}
+  printf "'%s'" "$value"
+}
+
+warn_unmanaged_completion() {
+  local file=$1
+  local marker=$2
+  local display_path=$3
+
+  if [[ -f $file ]] && grep -q 'aws-runas' "$file" && \
+     ! grep -Fq "$marker" "$file"; then
+    printf 'WARNING: Existing unmanaged aws-runas configuration was found in %s.\n' \
+      "$display_path" >&2
+    printf '%s\n' \
+      'It was preserved; review it to avoid loading completion twice.' >&2
+  fi
+}
+
+bash_startup_file() {
+  local candidate
+
+  if [[ $platform == darwin ]]; then
+    for candidate in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
+      if [[ -e $candidate || -L $candidate ]]; then
+        printf '%s' "$candidate"
+        return
+      fi
+    done
+    printf '%s' "$HOME/.bash_profile"
+  else
+    printf '%s' "$HOME/.bashrc"
+  fi
+}
+
+configure_zsh() {
+  local completion_path completion_relative path_line completion_block
+  local path_start path_end completion_start completion_end
+
+  completion_path=$HOME/.local/share/aws-runas/aws-runas-zsh-completion
+  install_upstream_completion zsh "$completion_path"
+  path_line=$(posix_path_line)
+  completion_relative=${completion_path#"$HOME"}
   # $HOME is intentionally written literally for future sessions.
   # shellcheck disable=SC2016
   printf -v completion_block \
@@ -107,14 +232,8 @@ configure_zsh() {
   path_end='# <<< aws-metadata-agent PATH <<<'
   completion_start='# >>> aws-metadata-agent aws-runas completion >>>'
   completion_end='# <<< aws-metadata-agent aws-runas completion <<<'
-  if [[ -f $HOME/.zshrc ]] && \
-     grep -q 'aws-runas' "$HOME/.zshrc" && \
-     ! grep -Fq "$completion_start" "$HOME/.zshrc"; then
-    printf '%s\n' \
-      'WARNING: Existing unmanaged aws-runas configuration was found in ~/.zshrc.' >&2
-    printf '%s\n' \
-      'It was preserved; review it to avoid loading completion twice.' >&2
-  fi
+  warn_unmanaged_completion \
+    "$HOME/.zshrc" "$completion_start" "$HOME/.zshrc"
   replace_managed_block "$HOME/.zprofile" "$path_start" "$path_end" "$path_line"
   replace_managed_block \
     "$HOME/.zshrc" "$completion_start" "$completion_end" "$completion_block"
@@ -124,6 +243,113 @@ configure_zsh() {
   printf '%s\n' 'Open a new zsh session to load the changes.'
 }
 
+configure_bash() {
+  local startup_file completion_path completion_relative
+  local path_line completion_block path_start path_end
+  local completion_start completion_end
+
+  startup_file=$(bash_startup_file)
+  completion_path=$HOME/.local/share/aws-runas/aws-runas-bash-completion
+  install_upstream_completion bash "$completion_path"
+  path_line=$(posix_path_line)
+  completion_relative=${completion_path#"$HOME"}
+  # $HOME is intentionally written literally for future sessions.
+  # shellcheck disable=SC2016
+  printf -v completion_block \
+    'if [[ -r "$HOME"%q ]]; then\n  PROG=aws-runas\n  source "$HOME"%q\nfi' \
+    "$completion_relative" "$completion_relative"
+
+  path_start='# >>> aws-metadata-agent PATH >>>'
+  path_end='# <<< aws-metadata-agent PATH <<<'
+  completion_start='# >>> aws-metadata-agent aws-runas completion >>>'
+  completion_end='# <<< aws-metadata-agent aws-runas completion <<<'
+  warn_unmanaged_completion \
+    "$startup_file" "$completion_start" "${startup_file#"$HOME"/}"
+  replace_managed_block "$startup_file" "$path_start" "$path_end" "$path_line"
+  replace_managed_block \
+    "$startup_file" "$completion_start" "$completion_end" "$completion_block"
+
+  printf 'Configured Bash PATH and completion in %s.\n' "$startup_file"
+  printf 'Installed verified upstream Bash completion at %s.\n' "$completion_path"
+  printf '%s\n' 'Open a new Bash session to load the changes.'
+}
+
+configure_fish() {
+  local fish_config_dir path_file completion_path
+  local path_line completion_block path_start path_end
+  local completion_start completion_end
+
+  fish_config_dir=${XDG_CONFIG_HOME:-$HOME/.config}/fish
+  path_file=$fish_config_dir/conf.d/aws-metadata-agent.fish
+  completion_path=$fish_config_dir/completions/aws-runas.fish
+  review_fish_completion
+  path_line="fish_add_path --path $(fish_quote "$install_dir")"
+  completion_block=$(<"$fish_completion_source")
+
+  path_start='# >>> aws-metadata-agent PATH >>>'
+  path_end='# <<< aws-metadata-agent PATH <<<'
+  completion_start='# >>> aws-metadata-agent aws-runas completion >>>'
+  completion_end='# <<< aws-metadata-agent aws-runas completion <<<'
+  warn_unmanaged_completion \
+    "$path_file" "$path_start" "${path_file#"$HOME"/}"
+  warn_unmanaged_completion \
+    "$completion_path" "$completion_start" "${completion_path#"$HOME"/}"
+  replace_managed_block "$path_file" "$path_start" "$path_end" "$path_line"
+  replace_managed_block \
+    "$completion_path" "$completion_start" "$completion_end" "$completion_block"
+
+  printf 'Configured fish PATH in %s.\n' "$path_file"
+  printf 'Installed native fish completion at %s.\n' "$completion_path"
+  printf '%s\n' 'Open a new fish session to load the changes.'
+}
+
+configure_selected_shell() {
+  case $selected_shell in
+    zsh) configure_zsh ;;
+    bash) configure_bash ;;
+    fish) configure_fish ;;
+    *)
+      printf 'Unsupported login shell %s; shell files were not modified.\n' \
+        "${SHELL:-unset}" >&2
+      ;;
+  esac
+}
+
+print_shell_dry_run() {
+  local startup_file fish_config_dir
+
+  printf 'Shell: %s (%s)\n' "$selected_shell" "${SHELL:-unset}"
+  case $selected_shell in
+    zsh)
+      printf 'Zsh PATH: %s/.zprofile\n' "$HOME"
+      printf 'Zsh completion config: %s/.zshrc\n' "$HOME"
+      printf 'Zsh completion file: %s/.local/share/aws-runas/aws-runas-zsh-completion\n' \
+        "$HOME"
+      printf 'Zsh completion source: %s\n' \
+        "https://raw.githubusercontent.com/mmmorris1975/aws-runas/${version}/extras/aws-runas-zsh-completion"
+      ;;
+    bash)
+      startup_file=$(bash_startup_file)
+      printf 'Bash PATH and completion config: %s\n' "$startup_file"
+      printf 'Bash completion file: %s/.local/share/aws-runas/aws-runas-bash-completion\n' \
+        "$HOME"
+      printf 'Bash completion source: %s\n' \
+        "https://raw.githubusercontent.com/mmmorris1975/aws-runas/${version}/extras/aws-runas-bash-completion"
+      ;;
+    fish)
+      fish_config_dir=${XDG_CONFIG_HOME:-$HOME/.config}/fish
+      printf 'Fish PATH config: %s/conf.d/aws-metadata-agent.fish\n' \
+        "$fish_config_dir"
+      printf 'Fish completion file: %s/completions/aws-runas.fish\n' \
+        "$fish_config_dir"
+      printf 'Fish completion source: %s\n' "$fish_completion_source"
+      ;;
+    *)
+      printf '%s\n' 'Shell files: unchanged (unsupported login shell)'
+      ;;
+  esac
+}
+
 usage() {
   cat <<'EOF'
 Usage: ./bootstrap.sh [--version VERSION] [--install-dir DIRECTORY]
@@ -131,7 +357,8 @@ Usage: ./bootstrap.sh [--version VERSION] [--install-dir DIRECTORY]
 
 Downloads aws-runas directly from the upstream GitHub release, verifies the
 archive against the upstream SHA-256 checksum file, and installs the binary.
-With --configure-shell, it also configures PATH and upstream completion for zsh.
+With --configure-shell, it configures PATH and reviewed completion for the
+current zsh, Bash, or fish login shell.
 
 Defaults:
   version:     3.9.0
@@ -185,6 +412,8 @@ case $(uname -s) in
     ;;
 esac
 
+selected_shell=$(detect_login_shell)
+
 case $(uname -m) in
   x86_64|amd64) architecture=amd64 ;;
   arm64|aarch64) architecture=arm64 ;;
@@ -213,15 +442,10 @@ if [[ $dry_run == true ]]; then
   printf 'Checksums: %s\n' "$checksum_url"
   printf 'Install: %s/aws-runas\n' "$install_dir"
   if [[ $configure_shell == true ]]; then
-    printf 'Zsh PATH: %s/.zprofile\n' "$HOME"
-    printf 'Zsh completion config: %s/.zshrc\n' "$HOME"
-    printf 'Zsh completion file: %s/.local/share/aws-runas/aws-runas-zsh-completion\n' \
-      "$HOME"
-    printf 'Zsh completion source: %s\n' \
-      "https://raw.githubusercontent.com/mmmorris1975/aws-runas/${version}/extras/aws-runas-zsh-completion"
+    print_shell_dry_run
   else
     printf '%s\n' \
-      'Optional: rerun with --configure-shell to configure zsh PATH and completion.'
+      'Optional: rerun with --configure-shell to configure zsh, Bash, or fish.'
     printf '%s\n' \
       'Preview it first with: ./bootstrap.sh --configure-shell --dry-run'
   fi
@@ -328,10 +552,10 @@ if [[ $duplicate_found == true ]]; then
 fi
 
 if [[ $configure_shell == true ]]; then
-  configure_zsh
+  configure_selected_shell
 else
   printf '\n%s\n' \
-    'Optional shell setup: rerun with --configure-shell to configure zsh PATH and completion.'
+    'Optional shell setup: rerun with --configure-shell for zsh, Bash, or fish.'
   printf '%s\n' \
     'Preview it first with: ./bootstrap.sh --configure-shell --dry-run'
 fi
@@ -341,10 +565,28 @@ case :${PATH}: in
   *)
     if [[ $configure_shell != true ]]; then
       printf '\n%s is not currently in PATH.\n' "$install_dir"
-      printf '%s\n' 'For zsh, add this line to ~/.zprofile:'
-      # $PATH is intentionally printed for the user's shell to expand later.
-      # shellcheck disable=SC2016
-      printf '  export PATH="%s:$PATH"\n' "$install_dir"
+      case $selected_shell in
+        zsh)
+          printf '%s\n' 'For zsh, add this line to ~/.zprofile:'
+          # $PATH is intentionally printed for the user's shell to expand later.
+          # shellcheck disable=SC2016
+          printf '  export PATH="%s:$PATH"\n' "$install_dir"
+          ;;
+        bash)
+          printf 'For Bash, add this line to %s:\n' "$(bash_startup_file)"
+          # $PATH is intentionally printed for the user's shell to expand later.
+          # shellcheck disable=SC2016
+          printf '  export PATH="%s:$PATH"\n' "$install_dir"
+          ;;
+        fish)
+          printf '%s\n' 'For fish, run:'
+          printf '  fish_add_path --path %s\n' "$(fish_quote "$install_dir")"
+          ;;
+        *)
+          printf '%s\n' \
+            'Add that directory to PATH in the login shell configuration.'
+          ;;
+      esac
     fi
     ;;
 esac
