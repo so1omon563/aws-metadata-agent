@@ -43,6 +43,9 @@ for command in curl docker ip python3 sudo; do
   command -v "$command" >/dev/null 2>&1 || fail "Required command not found: $command"
 done
 
+docker_server_version=$(docker version --format '{{.Server.Version}}')
+readonly docker_server_version
+
 if ip address show dev lo | grep -Fq "$METADATA_ADDRESS/32"; then
   fail "$METADATA_ADDRESS is already configured on lo; refusing to disturb an existing metadata service."
 fi
@@ -86,7 +89,7 @@ server_pid=$!
 
 host_ready=no
 for _ in {1..50}; do
-  if response=$(curl --noproxy '*' --fail --silent --show-error \
+  if response=$(curl --noproxy '*' --fail --silent \
     --max-time 1 "http://$METADATA_ADDRESS$TEST_PATH") &&
     [[ $response == "$EXPECTED_BODY" ]]; then
     host_ready=yes
@@ -128,6 +131,6 @@ mounts=$(docker inspect --format '{{range .Mounts}}{{println .Source " -> " .Des
 
 docker start --attach "$container_name"
 
-printf 'Docker Engine default-bridge routing to http://%s:%s passed.\n' \
-  "$METADATA_ADDRESS" "$METADATA_PORT"
+printf 'Docker Engine %s default-bridge routing to http://%s:%s passed.\n' \
+  "$docker_server_version" "$METADATA_ADDRESS" "$METADATA_PORT"
 printf '%s\n' 'No AWS environment variables, AWS files, mounts, custom routes, or endpoint overrides were used.'
