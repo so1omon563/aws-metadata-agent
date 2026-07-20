@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+set -u
+
+if [[ -n ${MOCK_JOURNAL_OUTPUT:-} ]]; then
+  command cat "$MOCK_JOURNAL_OUTPUT"
+fi

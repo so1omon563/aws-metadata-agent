@@ -17,6 +17,7 @@ test:
 		install-release.sh install.sh uninstall.sh tests/syntax.sh tests/cli.sh \
 		tests/layout.sh tests/release-installer.sh tests/release.sh \
 		tests/pr-check-wait.sh tests/fixtures/curl tests/fixtures/gh-pr-check \
+		tests/fixtures/journalctl \
 		scripts/build_release_assets.sh scripts/wait_for_pr_check.sh; \
 	else \
 		echo "shellcheck not installed; skipped"; \

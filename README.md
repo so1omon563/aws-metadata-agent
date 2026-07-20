@@ -249,6 +249,7 @@ Other commands:
 ```sh
 aws-metadata open
 aws-metadata refresh
+aws-metadata errors
 aws-metadata status
 aws-metadata status --json
 aws-metadata logs
@@ -289,6 +290,43 @@ AWS_EC2_METADATA_SERVICE_ENDPOINT=http://127.0.0.1:18080/ aws sts get-caller-ide
 
 After a full install, applications use the standard endpoint and do not need
 that variable.
+
+### Troubleshooting profile selection
+
+An unexpected HTTP response from `aws-metadata use` means the metadata endpoint
+responded, but the credential broker could not complete the profile request.
+This is distinct from an unavailable endpoint, missing link-local address, or
+unloaded service. Check both boundaries without printing profile details:
+
+```sh
+aws-metadata diagnose
+aws-metadata errors
+```
+
+`aws-metadata errors` examines at most the last 200 broker log lines, selects
+the last 10 authentication errors, and prints redacted classifications rather
+than raw upstream messages. On macOS the complete broker log is at
+`~/Library/Logs/aws-metadata-agent.log`; on Linux it is in the systemd user
+journal for `aws-metadata-agent.service`. Treat the complete log as sensitive
+until you have inspected it locally.
+
+To determine whether a failure is inside the metadata-agent path, force the
+same profile refresh directly through the installed `aws-runas` binary:
+
+```sh
+/usr/local/libexec/aws-metadata-agent/aws-runas -r my-profile /usr/bin/true
+printf 'exit=%s\n' "$?"
+```
+
+If the direct command fails similarly, investigate the upstream profile,
+identity-provider, or AWS STS exchange. If it succeeds while
+`aws-metadata use my-profile` fails, retain the browser and role-cache state and
+report the comparison as an agent-path problem. Do not add `-v` or `-vv` to
+output that will be shared without reviewing and redacting it first: the
+official [aws-runas Program Usage](https://mmmorris1975.github.io/aws-runas/usage.html#diagnostics)
+warns that verbose diagnostics may contain AWS credentials. The official
+upstream documentation remains authoritative for deeper configuration and
+diagnostic behavior.
 
 ## Architecture
 
