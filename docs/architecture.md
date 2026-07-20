@@ -6,8 +6,8 @@
 - Work with applications that do not inherit custom AWS environment variables.
 - Keep the server alive independently of terminals.
 - Support browser-based SSO and MFA renewal.
-- Allow existing personal `runas.sh PROFILE` clients to keep working while the
-  team-facing interface uses `aws-metadata use PROFILE`.
+- Support direct profile selection from GUI automation through the packaged
+  `aws-metadata` CLI without requiring wrapper scripts.
 - Depend only on `aws-runas`, Bash, curl, and the native service manager.
 
 ## Privilege-separated services
