@@ -183,7 +183,7 @@ Pin the current documented release, verify the project-uploaded archive, and
 inspect both scripts before execution:
 
 ```bash
-version=0.2.2
+version=0.3.0
 archive="aws-metadata-agent-v${version}.tar.gz"
 checksum="${archive}.sha256"
 release_url="https://github.com/so1omon563/aws-metadata-agent/releases/download/v${version}"
