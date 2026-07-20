@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+set -E
+
+report_failure() {
+  local status=$?
+
+  printf 'Bootstrap shell test failed at line %s: %s\n' \
+    "${BASH_LINENO[0]}" "$BASH_COMMAND" >&2
+  return "$status"
+}
+
+trap report_failure ERR
 
 PROJECT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 readonly PROJECT_DIR
