@@ -33,15 +33,15 @@ Use `minor` or `major` only when the release scope requires it. Staging:
 1. fetches semantic tags;
 2. derives the next version from the latest stable tag;
 3. updates `VERSION`;
-4. moves nonempty `Unreleased` entries into a dated release section;
-5. advances pinned current-release examples in `README.md`,
-   `docs/direct-install.md`, and `install-release.sh`; and
-6. prints the required pull-request title.
+4. moves nonempty `Unreleased` entries into a dated release section; and
+5. prints the required pull-request title.
 
-`scripts/check_release.py` rejects those current-release examples when they do
-not all match `VERSION`. Historical versions in the changelog and illustrative
-release-process examples are intentionally excluded from that current-version
-contract.
+User-facing install commands are intentionally version-neutral: readers choose
+the current stable release and replace `X.Y.Z` while retaining an explicit,
+reviewable version. `scripts/check_release.py` rejects numeric release pins in
+the guarded README, direct-install guide, and helper examples. Release staging
+does not rewrite user documentation. Historical versions in the changelog and
+illustrative maintainer examples remain valid.
 
 Example title:
 
@@ -136,8 +136,13 @@ service changes, or AWS configuration.
 
 ## Documentation and release notes
 
-- Keep current pinned examples synchronized through release staging rather
-  than editing one document manually.
+- Run `make check-release` to confirm user-facing release examples remain
+  version-neutral. Never replace `X.Y.Z` with the current release in committed
+  installation documentation.
+- Review the README, quick start, installation guides, verification page, and
+  support claims for behavioral drift before opening every release-prep pull
+  request. Passing link checks cannot establish that prose still matches the
+  software.
 - Keep support claims tied to recorded validation; patch releases do not imply
   new platform support.
 - Link upstream `aws-runas` behavior to its official documentation rather than

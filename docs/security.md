@@ -1,5 +1,8 @@
 # Security model
 
+This page helps you decide whether the service's credential exposure and trust
+boundaries are appropriate for a workstation and its local workloads.
+
 For supported security-fix versions and private vulnerability reporting, see
 the repository [security policy](../SECURITY.md).
 

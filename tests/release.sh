@@ -39,15 +39,15 @@ cat >"$repo/CHANGELOG.md" <<'EOF'
 [0.2.0]: https://github.com/so1omon563/aws-metadata-agent/releases/tag/v0.2.0
 EOF
 cat >"$repo/docs/direct-install.md" <<'EOF'
-version=0.2.0
-sh ./install-release.sh --version 0.2.0
+version=X.Y.Z
+sh ./install-release.sh --version X.Y.Z
 EOF
 cat >"$repo/README.md" <<'EOF'
-version=0.2.0
+Use docs/direct-install.md for version-neutral release installation.
 EOF
 cat >"$repo/install-release.sh" <<'EOF'
 Examples:
-  ./install-release.sh --version 0.2.0
+  ./install-release.sh --version X.Y.Z
 EOF
 
 git -C "$repo" init -q
@@ -65,22 +65,41 @@ grep -Fq '[Unreleased]: https://github.com/so1omon563/aws-metadata-agent/compare
   "$repo/CHANGELOG.md"
 grep -Fq '[0.2.1]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.2.0...v0.2.1' \
   "$repo/CHANGELOG.md"
-grep -Fq 'version=0.2.1' "$repo/docs/direct-install.md"
-grep -Fq -- '--version 0.2.1' "$repo/docs/direct-install.md"
-grep -Fq 'version=0.2.1' "$repo/README.md"
-grep -Fq -- '--version 0.2.1' "$repo/install-release.sh"
+grep -Fq 'version=X.Y.Z' "$repo/docs/direct-install.md"
+grep -Fq -- '--version X.Y.Z' "$repo/docs/direct-install.md"
+grep -Fq -- '--version X.Y.Z' "$repo/install-release.sh"
 python3 "$repo/scripts/check_release.py" --root "$repo" --bump patch >/dev/null
 
 printf '%s\n' 'version=0.2.0' >"$repo/docs/direct-install.md"
 if python3 "$repo/scripts/check_release.py" \
   --root "$repo" --bump patch >/dev/null 2>&1; then
-  printf '%s\n' 'Release checks accepted a stale direct-install version.' >&2
+  printf '%s\n' 'Release checks accepted a numeric direct-install version.' >&2
   exit 1
 fi
 printf '%s\n' \
-  'version=0.2.1' \
-  'sh ./install-release.sh --version 0.2.1' \
+  'version=X.Y.Z' \
+  'sh ./install-release.sh --version X.Y.Z' \
   >"$repo/docs/direct-install.md"
+
+printf '%s\n' "  export version='0.2.1'" >"$repo/README.md"
+if python3 "$repo/scripts/check_release.py" \
+  --root "$repo" --bump patch >/dev/null 2>&1; then
+  printf '%s\n' \
+    'Release checks accepted an indented exported numeric README version.' >&2
+  exit 1
+fi
+printf '%s\n' 'Use docs/direct-install.md for version-neutral release installation.' \
+  >"$repo/README.md"
+
+printf '%s\n' 'Examples: ./install-release.sh --version 0.2.1' \
+  >"$repo/install-release.sh"
+if python3 "$repo/scripts/check_release.py" \
+  --root "$repo" --bump patch >/dev/null 2>&1; then
+  printf '%s\n' 'Release checks accepted a numeric helper version.' >&2
+  exit 1
+fi
+printf '%s\n' 'Examples: ./install-release.sh --version X.Y.Z' \
+  >"$repo/install-release.sh"
 
 git -C "$repo" add VERSION CHANGELOG.md README.md docs/direct-install.md install-release.sh
 git -C "$repo" commit -qm release

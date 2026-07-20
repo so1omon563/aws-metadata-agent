@@ -28,10 +28,13 @@ Both supported hosts require administrator access during service installation.
 
 ## Inspect, verify, bootstrap, and install
 
-Pin the documented release instead of resolving a mutable `latest` reference:
+Open the project [releases](https://github.com/so1omon563/aws-metadata-agent/releases),
+choose the current stable release, and replace `X.Y.Z` below with that semantic
+version. Keep the explicit version throughout the procedure instead of
+resolving a mutable `latest` reference:
 
 ```sh
-version=0.3.0
+version=X.Y.Z
 archive="aws-metadata-agent-v${version}.tar.gz"
 checksum="${archive}.sha256"
 release_url="https://github.com/so1omon563/aws-metadata-agent/releases/download/v${version}"
@@ -120,13 +123,13 @@ curl --proto '=https' --tlsv1.2 --fail --location --show-error \
   --output install-release.sh \
   https://raw.githubusercontent.com/so1omon563/aws-metadata-agent/main/install-release.sh
 less install-release.sh
-sh ./install-release.sh --version 0.3.0
+sh ./install-release.sh --version X.Y.Z
 ```
 
 Installer options follow a literal `--`:
 
 ```sh
-sh ./install-release.sh --version 0.3.0 -- \
+sh ./install-release.sh --version X.Y.Z -- \
   --aws-runas "$HOME/.local/bin/aws-runas"
 ```
 
@@ -145,7 +148,7 @@ is:
 ```sh
 curl --proto '=https' --tlsv1.2 --fail --location --show-error --silent \
   https://raw.githubusercontent.com/so1omon563/aws-metadata-agent/main/install-release.sh \
-  | sh -s -- --version 0.3.0
+  | sh -s -- --version X.Y.Z
 ```
 
 The helper URL on `main` is mutable. The versioned archive it downloads is a

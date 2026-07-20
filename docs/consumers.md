@@ -1,5 +1,8 @@
 # Consumer recipes
 
+This page shows how to connect AWS CLI, SDKs, profile-oriented applications,
+containers, coding agents, and GUI automation to the metadata endpoint.
+
 Every consumer sees the one globally active agent profile. A consumer does not
 reserve the profile it first observed, and an optional consumer compatibility
 profile does not provide locking. If another process selects a different
@@ -20,7 +23,7 @@ web-identity settings, IAM Identity Center, shared credentials,
 `credential_process`, and container credentials all precede IMDS.
 
 Use the provider-isolated verification in
-[Getting started](getting-started.md#5-prove-an-aws-client-uses-metadata) when
+[Verification](verification.md#4-metadata-credential-path) when
 proving the integration. It makes an AWS STS request and prints identity
 information; verify the expected role locally and do not publish real output.
 

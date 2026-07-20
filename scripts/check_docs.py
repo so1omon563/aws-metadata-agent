@@ -105,23 +105,47 @@ def validate_index(root: Path) -> None:
 def validate_reader_contract(root: Path) -> None:
     readme = (root / "README.md").read_text(encoding="utf-8")
     for required in (
+        "makes a developer workstation behave like an EC2 instance",
         "## Is this for me?",
-        "## Important behavior and trust model",
-        "## Choose an installation path",
+        "## Know before installing",
+        "## Supported platforms",
         "## Quick start",
         "docs/getting-started.md",
+        "docs/concepts.md",
+        "docs/verification.md",
         "docs/cli-reference.md",
         "docs/troubleshooting.md",
     ):
         if required not in readme:
             raise DocsError(f"README.md is missing reader-journey contract: {required}")
 
-    if "The `v0.2.0` support boundary" in readme:
-        raise DocsError("README.md contains the stale v0.2.0 support-boundary wording")
+    index = (root / "docs/README.md").read_text(encoding="utf-8")
+    for required in (
+        "## Start here",
+        "## Guides",
+        "## Concepts",
+        "## Reference",
+        "## Architecture and security",
+        "## Maintenance",
+    ):
+        if required not in index:
+            raise DocsError(f"docs/README.md is missing navigation group: {required}")
+
+    getting_started = (root / "docs/getting-started.md").read_text(encoding="utf-8")
+    for required in (
+        "install -> confirm upstream profile -> check service -> select profile -> verify",
+        "[verification checklist](verification.md)",
+    ):
+        if required not in getting_started:
+            raise DocsError(
+                f"docs/getting-started.md is missing happy-path contract: {required}"
+            )
 
     user_files = (
         "README.md",
         "docs/getting-started.md",
+        "docs/concepts.md",
+        "docs/verification.md",
         "docs/homebrew.md",
         "docs/direct-install.md",
         "docs/aws-runas-configuration.md",
@@ -141,6 +165,8 @@ def validate_reader_contract(root: Path) -> None:
         )
 
     troubleshooting = (root / "docs/troubleshooting.md").read_text(encoding="utf-8")
+    if "## Choose the failing symptom" not in troubleshooting:
+        raise DocsError("docs/troubleshooting.md omits the symptom router")
     linux_service_status = (
         "systemctl status aws-metadata-agent-address.service aws-metadata-agent.socket \\\n"
         "  aws-metadata-agent.service"

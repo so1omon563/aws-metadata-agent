@@ -1,9 +1,13 @@
 # Configure aws-runas
 
+This guide helps you configure and test one upstream `aws-runas` profile before
+exposing it through the metadata service. It also shows sanitized IAM, SAML,
+OIDC, and profile-oriented consumer patterns used with the agent.
+
 `aws-metadata-agent` exposes profiles that are configured and authenticated by
-`aws-runas`. It does not create profiles or replace the upstream configuration
-model. Start with one upstream profile that works directly; add the metadata
-service only after that boundary succeeds.
+`aws-runas`; profile creation and authentication behavior remain upstream
+responsibilities. Start with one profile that works directly, then add the
+metadata service.
 
 The official [aws-runas documentation](https://mmmorris1975.github.io/aws-runas/)
 is authoritative. When this guide is incomplete, ambiguous, or differs from

@@ -5,6 +5,15 @@ All notable changes to this project are documented here. Changes remain under
 
 ## [Unreleased]
 
+### Changed
+
+- Reorganized documentation into a focused landing page, unbranched quick
+  start, concept guide, consolidated verification checklist, symptom-first
+  troubleshooting router, and explicit guide/reference hierarchy.
+- Made direct-release examples version-neutral while preserving explicit
+  inspect-first version selection, and added release validation that rejects
+  stale numeric pins in guarded user documentation.
+
 ## [0.3.0] - 2026-07-20
 
 ### Added
