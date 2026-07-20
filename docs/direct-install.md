@@ -31,7 +31,7 @@ Both supported hosts require administrator access during service installation.
 Pin the documented release instead of resolving a mutable `latest` reference:
 
 ```sh
-version=0.2.2
+version=0.3.0
 archive="aws-metadata-agent-v${version}.tar.gz"
 checksum="${archive}.sha256"
 release_url="https://github.com/so1omon563/aws-metadata-agent/releases/download/v${version}"
@@ -120,13 +120,13 @@ curl --proto '=https' --tlsv1.2 --fail --location --show-error \
   --output install-release.sh \
   https://raw.githubusercontent.com/so1omon563/aws-metadata-agent/main/install-release.sh
 less install-release.sh
-sh ./install-release.sh --version 0.2.2
+sh ./install-release.sh --version 0.3.0
 ```
 
 Installer options follow a literal `--`:
 
 ```sh
-sh ./install-release.sh --version 0.2.2 -- \
+sh ./install-release.sh --version 0.3.0 -- \
   --aws-runas "$HOME/.local/bin/aws-runas"
 ```
 
@@ -145,7 +145,7 @@ is:
 ```sh
 curl --proto '=https' --tlsv1.2 --fail --location --show-error --silent \
   https://raw.githubusercontent.com/so1omon563/aws-metadata-agent/main/install-release.sh \
-  | sh -s -- --version 0.2.2
+  | sh -s -- --version 0.3.0
 ```
 
 The helper URL on `main` is mutable. The versioned archive it downloads is a
