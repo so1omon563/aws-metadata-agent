@@ -11,13 +11,16 @@ permissions:
 
 jobs:
   test:
+    name: test (${{ matrix.check_name }})
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - macos-latest
-          - ubuntu-latest
-    runs-on: ${{ matrix.os }}
+        include:
+          - check_name: macos-latest
+            runner: macos-latest
+          - check_name: ubuntu-latest
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - name: Check out repository
@@ -35,3 +38,7 @@ jobs:
 
       - name: Run tests
         run: make test
+
+      - name: Validate Docker Engine metadata routing
+        if: runner.os == 'Linux'
+        run: ./tests/container-runtime-linux.sh

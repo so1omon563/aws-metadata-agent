@@ -44,10 +44,13 @@ that have passed end-to-end validation:
   credential discovery, logout/reboot service persistence, and clean
   uninstall.
 
-Other macOS versions and architectures, other Linux distributions and
-architectures, and Linux container-runtime access may work but are not part of
-the `v0.2.0` support claim. The active profile is process state: after a service
-restart or reboot, select the profile again before requesting credentials.
+Other macOS versions and architectures and other Linux distributions and
+architectures may work but are not part of the `v0.2.0` host support claim.
+Docker Engine container consumption has separate recurring validation on a
+GitHub-hosted Ubuntu 24.04 x86_64 runner; that routing evidence does not expand
+the supported Linux installation boundary. The active profile is process
+state: after a service restart or reboot, select the profile again before
+requesting credentials.
 
 ## Requirements
 
@@ -460,14 +463,21 @@ planned lease/locking design.
 ### Containers
 
 The standard metadata endpoint has been validated from Docker Desktop on the
-tested Apple Silicon macOS setup. No AWS credential environment variables or
-mounted AWS configuration files were needed in that validation.
+tested Apple Silicon macOS setup. It also has a recurring credential-free
+Docker Engine check on a GitHub-hosted Ubuntu 24.04 x86_64 runner. The Linux
+check uses Docker's default bridge to reach a host-owned
+`169.254.169.254:80`; it does not add a container route, mount AWS files, pass
+AWS credential environment variables, or configure a custom metadata
+endpoint. This validates the Linux container-routing boundary, not x86_64 as
+an installation host.
 
 Container runtimes and host configurations vary in how they route the reserved
 metadata address. Test the runtime used by your team; a container may need an
 explicit route to the host or may reserve `169.254.169.254` for its own
 metadata proxy. The installer does not change Docker, Podman, or Kubernetes
-networking. Linux container runtime access remains separately unverified.
+networking. Podman and Kubernetes remain unverified and are not part of the
+support claim. See [Container runtime validation](docs/container-runtimes.md)
+for the evidence matrix, Linux test method, and runtime-specific caveats.
 
 ## Development
 

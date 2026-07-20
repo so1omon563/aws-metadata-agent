@@ -176,5 +176,16 @@ assert_contains \
 assert_not_contains \
   "$PROJECT_DIR/install.sh" \
   'awk '\''{print $2}'\'''
+# The assertion intentionally searches for the literal workflow expression.
+# shellcheck disable=SC2016
+assert_contains \
+  "$PROJECT_DIR/.github/workflows/test.yml" \
+  'name: test (${{ matrix.check_name }})'
+assert_contains \
+  "$PROJECT_DIR/.github/workflows/test.yml" \
+  'check_name: ubuntu-latest'
+assert_contains \
+  "$PROJECT_DIR/.github/workflows/test.yml" \
+  'runner: ubuntu-24.04'
 
 printf '%s\n' 'Installation layout checks passed.'
