@@ -5,7 +5,10 @@ set -o pipefail
 
 readonly BASE_URL="${AWS_METADATA_URL:-http://169.254.169.254}"
 readonly DEFAULT_WAIT="${AWS_METADATA_WAIT_SECONDS:-0}"
+readonly DEFAULT_CLEAR_WAIT="${AWS_METADATA_CLEAR_WAIT_SECONDS:-15}"
 readonly AUTH_REQUEST_GRACE_SECONDS=5
+readonly BROKER_LABEL=com.github.so1omon563.aws-metadata-agent.broker
+readonly BROKER_UNIT=aws-metadata-agent.service
 readonly VERSION_FILE="${AWS_METADATA_VERSION_FILE:-/usr/local/libexec/aws-metadata-agent/VERSION}"
 readonly PACKAGE_ROOT="${AWS_METADATA_PACKAGE_ROOT:-}"
 readonly PACKAGE_CLI="${AWS_METADATA_PACKAGE_CLI:-}"
@@ -15,6 +18,7 @@ usage() {
 Usage:
   aws-metadata use PROFILE [--open|--no-open] [--wait SECONDS] [--json]
   aws-metadata profile PROFILE [--open|--no-open] [--wait SECONDS] [--json]
+  aws-metadata clear [--wait SECONDS] [--json]
   aws-metadata status [--json]
   aws-metadata open
   aws-metadata refresh
@@ -29,6 +33,10 @@ Usage:
 Exit codes for profile:
   0 ready  2 usage  3 unavailable  4 authentication required
   5 authentication timeout  6 unexpected HTTP response
+
+Exit codes for clear:
+  0 clear  2 usage or unsupported platform  3 unavailable before restart
+  5 restart timeout  6 restart failure or unexpected profile state
 EOF
 }
 
@@ -509,6 +517,127 @@ status_command() (
   esac
 )
 
+restart_broker() {
+  case "$(uname -s)" in
+    Darwin)
+      command launchctl kickstart -k "gui/$(id -u)/$BROKER_LABEL"
+      ;;
+    Linux)
+      command systemctl --user restart "$BROKER_UNIT"
+      ;;
+    *)
+      return 64
+      ;;
+  esac
+}
+
+clear_command() (
+  local json=false
+  local wait_seconds=$DEFAULT_CLEAR_WAIT
+  local body_file status body restart_status started now
+
+  while (($#)); do
+    case $1 in
+      --json) json=true ;;
+      --wait)
+        shift
+        if (($# == 0)) || [[ ! $1 =~ ^[0-9]+$ ]]; then
+          printf '%s\n' '--wait requires a non-negative integer.' >&2
+          return 2
+        fi
+        wait_seconds=$1
+        ;;
+      *)
+        printf 'Unknown clear option: %s\n' "$1" >&2
+        return 2
+        ;;
+    esac
+    shift
+  done
+
+  if [[ ! $wait_seconds =~ ^[0-9]+$ ]]; then
+    printf '%s\n' 'AWS_METADATA_CLEAR_WAIT_SECONDS must be a non-negative integer.' >&2
+    return 2
+  fi
+
+  body_file=$(mktemp "${TMPDIR:-/tmp}/aws-metadata.XXXXXX") || return 6
+  trap 'rm -f "$body_file"' EXIT
+  status=$(http_request GET /profile '' "$body_file")
+  body=$(<"$body_file")
+
+  case $status in
+    200) ;;
+    500)
+      if [[ $body == 'profile not set' ]]; then
+        print_result "$json" clear 'No AWS metadata profile is selected.'
+        return 0
+      fi
+      print_result "$json" error \
+        "AWS metadata service returned HTTP $status before the profile could be cleared."
+      return 6
+      ;;
+    000|timeout)
+      print_result "$json" unavailable \
+        "AWS metadata service is unavailable at $BASE_URL."
+      return 3
+      ;;
+    *)
+      print_result "$json" error \
+        "AWS metadata service returned HTTP $status before the profile could be cleared."
+      return 6
+      ;;
+  esac
+
+  restart_status=0
+  restart_broker || restart_status=$?
+  if [[ $restart_status -ne 0 ]]; then
+    if [[ $restart_status -eq 64 ]]; then
+      print_result "$json" error \
+        'Profile clearing is supported only on macOS and Linux.'
+      return 2
+    fi
+    print_result "$json" error \
+      'Unable to restart the AWS metadata credential broker.'
+    return 6
+  fi
+
+  started=$(date +%s)
+  while :; do
+    status=$(http_request GET /profile '' "$body_file" 1)
+    body=$(<"$body_file")
+    case $status in
+      500)
+        if [[ $body == 'profile not set' ]]; then
+          print_result "$json" clear 'AWS metadata profile cleared.'
+          return 0
+        fi
+        print_result "$json" error \
+          "AWS metadata service returned HTTP $status after the broker restart."
+        return 6
+        ;;
+      200)
+        print_result "$json" error \
+          'A profile was selected while the AWS metadata broker was being cleared.'
+        return 6
+        ;;
+      000|timeout) ;;
+      *)
+        print_result "$json" error \
+          "AWS metadata service returned HTTP $status after the broker restart."
+        return 6
+        ;;
+    esac
+
+    now=$(date +%s)
+    if ((now - started >= wait_seconds)); then
+      print_result "$json" timeout \
+        'Timed out waiting for the AWS metadata broker to return without a selected profile.'
+      return 5
+    fi
+    sleep 1
+  done
+)
+
 logs_command() {
   case "$(uname -s)" in
     Darwin)
@@ -655,6 +784,7 @@ main() {
   case $command_name in
     use) profile_command interactive "$@" ;;
     profile) profile_command automation "$@" ;;
+    clear) clear_command "$@" ;;
     status) status_command "$@" ;;
     open|refresh) open_browser ;;
     errors) errors_command "$@" ;;

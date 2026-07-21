@@ -49,7 +49,13 @@ documents the action and additional examples.
 
 6. Give the key an appropriate title and icon.
 7. Repeat for each desired AWS profile.
-8. Restart the Stream Deck application after initially installing the plugin
+8. Add a separate safety key that clears the active profile:
+
+   ```sh
+   /opt/homebrew/bin/aws-metadata clear --json
+   ```
+
+9. Restart the Stream Deck application after initially installing the plugin
    or adding the actions if the physical device does not begin dispatching the
    new action. This restart was required during project validation.
 
@@ -127,6 +133,11 @@ successful selection wins.
 Avoid rapid repeated presses or conflicting profile keys. Stream Deck does not
 display the JSON result, the agent does not implement a per-key lock, and a
 later successful action can replace the identity selected by an earlier one.
+
+Press the clear key when production or other elevated work is complete. A
+successful clear prevents new metadata requests from receiving that active
+identity, but applications may continue using credentials they fetched before
+the clear until those credentials expire.
 
 ## Troubleshooting
 

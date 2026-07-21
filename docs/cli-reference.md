@@ -9,6 +9,7 @@ upstream `aws-runas` broker. Normal profile changes do not require `sudo`.
 | --- | --- | --- |
 | `use PROFILE` | A human is selecting an upstream profile. | Opens the browser when required and waits 300 seconds by default. |
 | `profile PROFILE` | Automation is selecting a profile. | Does not open a browser or wait by default; use explicit flags. |
+| `clear` | Stop the broker from vending the selected profile to new metadata requests. | Restarts only the user broker when needed and verifies healthy no-profile state. |
 | `status` | Check endpoint and active-profile state. | `profile: null` or “No profile is selected” is healthy after startup. |
 | `open` | Open the upstream browser interface. | Opens `http://169.254.169.254`; it does not select a profile. |
 | `refresh` | Open the browser interface for its **Refresh Now** control. | Currently the same operation as `open`; the CLI itself does not force refresh. |
@@ -88,6 +89,40 @@ When a real profile is active, `status --json` can include upstream profile
 fields such as role or authentication URLs. Do not treat that output as safe
 to paste into a public issue.
 
+## Clear the active profile
+
+```sh
+aws-metadata clear
+aws-metadata clear --wait 30 --json
+```
+
+`clear` is idempotent. If no profile is selected, it exits successfully
+without restarting anything. Otherwise it restarts only the unprivileged
+broker through the user's launchd or systemd manager, tolerates the expected
+brief endpoint outage, and succeeds only after `/profile` reports healthy
+no-profile state. It does not require `sudo` and leaves privileged address and
+forwarding services running.
+
+The command never prints the previous profile name. A successful JSON response
+is:
+
+```json
+{"state":"clear","message":"AWS metadata profile cleared."}
+```
+
+Clearing is not credential revocation. Applications can continue using
+credentials they already fetched until those credentials expire. Upstream role
+credential caches and browser sessions remain under the user's ownership, and
+another local caller can select a profile again immediately.
+
+| Code | Meaning |
+| ---: | --- |
+| 0 | No profile is selected, either already or after the broker restart. |
+| 2 | Invalid arguments or an unsupported operating system. |
+| 3 | The metadata endpoint was unavailable before any restart was attempted. |
+| 5 | The broker did not return in the configured wait period. |
+| 6 | The restart failed, the endpoint returned an unexpected state, or another caller selected a profile during clearing. |
+
 ## Diagnostics and logs
 
 ```sh
@@ -117,6 +152,7 @@ The CLI supports bounded diagnostic and test overrides:
 | --- | --- | --- |
 | `AWS_METADATA_URL` | Metadata base URL, primarily for an unprivileged test broker. | `http://169.254.169.254` |
 | `AWS_METADATA_WAIT_SECONDS` | Default selection wait. | `300` for `use`, `0` for `profile` |
+| `AWS_METADATA_CLEAR_WAIT_SECONDS` | Default wait for the broker to return after `clear`. | `15` |
 | `AWS_METADATA_REQUEST_TIMEOUT` | Explicit HTTP request deadline. | `15`, extended for interactive waits |
 | `AWS_METADATA_CONNECT_TIMEOUT` | Endpoint connection timeout. | `2` |
 

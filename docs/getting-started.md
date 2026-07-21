@@ -153,6 +153,17 @@ Complete the [verification checklist](verification.md). It proves, in order:
 When those checks pass, the happy path is complete. Applications using the
 default AWS credential chain need no project-specific wrapper or endpoint.
 
+When work with the active identity is complete, return the broker to healthy
+no-profile state:
+
+```sh
+aws-metadata clear
+```
+
+This prevents new metadata requests from retrieving that active identity. It
+does not revoke credentials an application already fetched; see the
+[security model](security.md#profile-switching-is-global-and-unauthenticated).
+
 ## Connect another application
 
 - Use [Consumer recipes](consumers.md) for AWS CLI, SDK, VS Code, coding-agent,

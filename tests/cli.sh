@@ -18,6 +18,30 @@ readonly CURL_MAX_TIME_LOG="$TEMP_ROOT/curl-max-time"
 readonly CURL_CALL_LOG="$TEMP_ROOT/curl-calls"
 readonly CURL_RESPONSE_QUEUE="$TEMP_ROOT/curl-responses"
 readonly TRANSIENT_SAML_STS_TIMEOUT='failed to refresh cached credentials, operation error STS: AssumeRoleWithSAML, https response error StatusCode: 408, RequestID: , api error UnknownError: UnknownError'
+readonly SERVICE_MOCKS="$TEMP_ROOT/service-mocks"
+readonly SERVICE_CALL_LOG="$TEMP_ROOT/service-calls"
+
+mkdir -p "$SERVICE_MOCKS"
+cat >"$SERVICE_MOCKS/uname" <<'EOF'
+#!/usr/bin/env bash
+set -eu
+[[ ${1:-} == -s ]]
+printf '%s\n' "${MOCK_UNAME_S:?}"
+EOF
+cat >"$SERVICE_MOCKS/launchctl" <<'EOF'
+#!/usr/bin/env bash
+set -u
+printf 'launchctl %s\n' "$*" >>"${MOCK_SERVICE_CALL_LOG:?}"
+exit "${MOCK_SERVICE_EXIT:-0}"
+EOF
+cat >"$SERVICE_MOCKS/systemctl" <<'EOF'
+#!/usr/bin/env bash
+set -u
+printf 'systemctl %s\n' "$*" >>"${MOCK_SERVICE_CALL_LOG:?}"
+exit "${MOCK_SERVICE_EXIT:-0}"
+EOF
+chmod +x "$SERVICE_MOCKS/uname" "$SERVICE_MOCKS/launchctl" \
+  "$SERVICE_MOCKS/systemctl"
 
 assert_exit() {
   local expected=$1
@@ -58,6 +82,18 @@ assert_curl_calls() {
   fi
 }
 
+assert_service_call() {
+  local expected=$1
+  local actual
+
+  actual=$(<"$SERVICE_CALL_LOG")
+  if [[ $actual != "$expected" ]]; then
+    printf 'Expected service call %s, received %s.\n' \
+      "$expected" "$actual" >&2
+    exit 1
+  fi
+}
+
 MOCK_CURL_STATUS=200 assert_exit 0 "$CLI" profile test-profile --no-open
 MOCK_CURL_STATUS=200 assert_exit 0 "$CLI" use test-profile
 MOCK_CURL_STATUS=401 assert_exit 4 "$CLI" use test-profile --no-open
@@ -69,6 +105,90 @@ MOCK_CURL_STATUS=500 MOCK_CURL_BODY='profile not set' \
   assert_exit 0 "$CLI" status --json
 MOCK_CURL_STATUS=500 MOCK_CURL_BODY='unexpected failure' \
   assert_exit 6 "$CLI" status --json
+
+# Clearing an already-empty broker is idempotent and does not restart it.
+: >"$SERVICE_CALL_LOG"
+clear_output=$(MOCK_CURL_STATUS=500 MOCK_CURL_BODY='profile not set' \
+  PATH="$SERVICE_MOCKS:$PATH" MOCK_UNAME_S=Darwin \
+  MOCK_SERVICE_CALL_LOG="$SERVICE_CALL_LOG" "$CLI" clear --json)
+if [[ $clear_output != \
+  '{"state":"clear","message":"No AWS metadata profile is selected."}' ]] ||
+   [[ -s $SERVICE_CALL_LOG ]]; then
+  printf 'Unexpected idempotent clear result: %s\n' "$clear_output" >&2
+  exit 1
+fi
+
+# macOS restarts only the user broker and tolerates its transient outage.
+: >"$SERVICE_CALL_LOG"
+printf '200|{"name":"sensitive-profile"}\n000|\n500|profile not set\n' \
+  >"$CURL_RESPONSE_QUEUE"
+clear_output=$(PATH="$SERVICE_MOCKS:$PATH" MOCK_UNAME_S=Darwin \
+  MOCK_SERVICE_CALL_LOG="$SERVICE_CALL_LOG" \
+  MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
+  "$CLI" clear --wait 2 --json)
+if [[ $clear_output != \
+  '{"state":"clear","message":"AWS metadata profile cleared."}' ]] ||
+   [[ $clear_output == *'sensitive-profile'* ]]; then
+  printf 'Unexpected macOS clear result: %s\n' "$clear_output" >&2
+  exit 1
+fi
+assert_service_call \
+  "launchctl kickstart -k gui/$(id -u)/com.github.so1omon563.aws-metadata-agent.broker"
+
+# Linux uses only the systemd user broker and confirms healthy no-profile state.
+: >"$SERVICE_CALL_LOG"
+printf '200|{"name":"sensitive-profile"}\n500|profile not set\n' \
+  >"$CURL_RESPONSE_QUEUE"
+clear_output=$(PATH="$SERVICE_MOCKS:$PATH" MOCK_UNAME_S=Linux \
+  MOCK_SERVICE_CALL_LOG="$SERVICE_CALL_LOG" \
+  MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
+  "$CLI" clear --json)
+if [[ $clear_output != \
+  '{"state":"clear","message":"AWS metadata profile cleared."}' ]] ||
+   [[ $clear_output == *'sensitive-profile'* ]]; then
+  printf 'Unexpected Linux clear result: %s\n' "$clear_output" >&2
+  exit 1
+fi
+assert_service_call 'systemctl --user restart aws-metadata-agent.service'
+
+# Clear reports deterministic failures without exposing the active profile.
+: >"$SERVICE_CALL_LOG"
+MOCK_CURL_STATUS=000 PATH="$SERVICE_MOCKS:$PATH" MOCK_UNAME_S=Darwin \
+  MOCK_SERVICE_CALL_LOG="$SERVICE_CALL_LOG" assert_exit 3 "$CLI" clear
+[[ ! -s $SERVICE_CALL_LOG ]]
+
+: >"$SERVICE_CALL_LOG"
+MOCK_CURL_STATUS=200 PATH="$SERVICE_MOCKS:$PATH" MOCK_UNAME_S=Darwin \
+  MOCK_SERVICE_EXIT=2 MOCK_SERVICE_CALL_LOG="$SERVICE_CALL_LOG" \
+  assert_exit 6 "$CLI" clear --json
+
+: >"$SERVICE_CALL_LOG"
+printf '200|{"name":"sensitive-profile"}\n200|{"name":"other-sensitive-profile"}\n' \
+  >"$CURL_RESPONSE_QUEUE"
+clear_error_exit=0
+clear_error=$(PATH="$SERVICE_MOCKS:$PATH" MOCK_UNAME_S=Linux \
+  MOCK_SERVICE_CALL_LOG="$SERVICE_CALL_LOG" \
+  MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
+  "$CLI" clear --json 2>&1) || clear_error_exit=$?
+if [[ $clear_error_exit -ne 6 ]] ||
+   [[ $clear_error != *'"state":"error"'* ]] ||
+   [[ $clear_error == *'sensitive-profile'* ]]; then
+  printf 'Unexpected concurrent clear result: %s\n' "$clear_error" >&2
+  exit 1
+fi
+
+: >"$SERVICE_CALL_LOG"
+printf '200|{"name":"sensitive-profile"}\n000|\n' >"$CURL_RESPONSE_QUEUE"
+PATH="$SERVICE_MOCKS:$PATH" MOCK_UNAME_S=Linux \
+  MOCK_SERVICE_CALL_LOG="$SERVICE_CALL_LOG" \
+  MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
+  assert_exit 5 "$CLI" clear --wait 0 --json
+
+MOCK_CURL_STATUS=200 PATH="$SERVICE_MOCKS:$PATH" MOCK_UNAME_S=Other \
+  MOCK_SERVICE_CALL_LOG="$SERVICE_CALL_LOG" assert_exit 2 "$CLI" clear
+assert_exit 2 "$CLI" clear unexpected
+assert_exit 2 "$CLI" clear --wait invalid
+AWS_METADATA_CLEAR_WAIT_SECONDS=invalid assert_exit 2 "$CLI" clear
 
 profile_error_exit=0
 profile_error_output=$(MOCK_CURL_STATUS=500 \

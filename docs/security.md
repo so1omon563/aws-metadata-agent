@@ -60,6 +60,13 @@ Profile names are not credentials, but they can reveal environments, account
 roles, or organization structure. Treat them as potentially sensitive in logs
 and automation output.
 
+Use `aws-metadata clear` when work with the active identity is complete. It
+returns the broker to no-profile state and does not print the previous profile
+name. This reduces accidental future credential retrieval, but it is not a
+revocation boundary: applications may retain already-issued STS credentials
+until expiration, and any local caller with endpoint access can select a
+profile again.
+
 ## Privilege boundary
 
 `aws-runas` does not run as root. A root-owned wrapper rejects startup unless
