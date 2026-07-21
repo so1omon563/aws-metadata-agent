@@ -5,6 +5,12 @@ All notable changes to this project are documented here. Changes remain under
 
 ## [Unreleased]
 
+### Added
+
+- An idempotent `aws-metadata clear` command that returns the user broker to
+  healthy no-profile state without administrator access, bounds restart and
+  recovery time, verifies the result, and does not print the prior profile.
+
 ### Changed
 
 - Reorganized documentation into a focused landing page, unbranched quick
