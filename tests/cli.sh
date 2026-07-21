@@ -38,6 +38,9 @@ cat >"$SERVICE_MOCKS/systemctl" <<'EOF'
 #!/usr/bin/env bash
 set -u
 printf 'systemctl %s\n' "$*" >>"${MOCK_SERVICE_CALL_LOG:?}"
+if [[ -n ${MOCK_SERVICE_BLOCK_SECONDS:-} ]]; then
+  exec /bin/sleep "$MOCK_SERVICE_BLOCK_SECONDS"
+fi
 exit "${MOCK_SERVICE_EXIT:-0}"
 EOF
 chmod +x "$SERVICE_MOCKS/uname" "$SERVICE_MOCKS/launchctl" \
@@ -137,12 +140,12 @@ assert_service_call \
 
 # Linux uses only the systemd user broker and confirms healthy no-profile state.
 : >"$SERVICE_CALL_LOG"
-printf '200|{"name":"sensitive-profile"}\n500|profile not set\n' \
+printf '200|{"name":"sensitive-profile"}\n000|\n500|profile not set\n' \
   >"$CURL_RESPONSE_QUEUE"
 clear_output=$(PATH="$SERVICE_MOCKS:$PATH" MOCK_UNAME_S=Linux \
   MOCK_SERVICE_CALL_LOG="$SERVICE_CALL_LOG" \
   MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
-  "$CLI" clear --json)
+  "$CLI" clear --wait 2 --json)
 if [[ $clear_output != \
   '{"state":"clear","message":"AWS metadata profile cleared."}' ]] ||
    [[ $clear_output == *'sensitive-profile'* ]]; then
@@ -169,7 +172,7 @@ clear_error_exit=0
 clear_error=$(PATH="$SERVICE_MOCKS:$PATH" MOCK_UNAME_S=Linux \
   MOCK_SERVICE_CALL_LOG="$SERVICE_CALL_LOG" \
   MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
-  "$CLI" clear --json 2>&1) || clear_error_exit=$?
+  "$CLI" clear --wait 0 --json 2>&1) || clear_error_exit=$?
 if [[ $clear_error_exit -ne 6 ]] ||
    [[ $clear_error != *'"state":"error"'* ]] ||
    [[ $clear_error == *'sensitive-profile'* ]]; then
@@ -189,6 +192,21 @@ MOCK_CURL_STATUS=200 PATH="$SERVICE_MOCKS:$PATH" MOCK_UNAME_S=Other \
 assert_exit 2 "$CLI" clear unexpected
 assert_exit 2 "$CLI" clear --wait invalid
 AWS_METADATA_CLEAR_WAIT_SECONDS=invalid assert_exit 2 "$CLI" clear
+
+: >"$SERVICE_CALL_LOG"
+printf '200|{"name":"sensitive-profile"}\n000|\n' >"$CURL_RESPONSE_QUEUE"
+PATH="$SERVICE_MOCKS:$PATH" MOCK_UNAME_S=Linux \
+  MOCK_SERVICE_CALL_LOG="$SERVICE_CALL_LOG" \
+  MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
+  assert_exit 5 "$CLI" clear --wait 00 --json
+
+# A blocked service-manager client remains inside the same clear deadline.
+: >"$SERVICE_CALL_LOG"
+printf '200|{"name":"sensitive-profile"}\n000|\n' >"$CURL_RESPONSE_QUEUE"
+PATH="$SERVICE_MOCKS:$PATH" MOCK_UNAME_S=Linux \
+  MOCK_SERVICE_BLOCK_SECONDS=30 MOCK_SERVICE_CALL_LOG="$SERVICE_CALL_LOG" \
+  MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
+  assert_exit 5 "$CLI" clear --wait 0 --json
 
 profile_error_exit=0
 profile_error_output=$(MOCK_CURL_STATUS=500 \

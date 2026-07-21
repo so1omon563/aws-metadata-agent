@@ -534,7 +534,8 @@ restart_broker() {
 clear_command() (
   local json=false
   local wait_seconds=$DEFAULT_CLEAR_WAIT
-  local body_file status body restart_status started now
+  local body_file status body restart_status started now restart_pid=''
+  local restart_finished=false
 
   while (($#)); do
     case $1 in
@@ -559,9 +560,10 @@ clear_command() (
     printf '%s\n' 'AWS_METADATA_CLEAR_WAIT_SECONDS must be a non-negative integer.' >&2
     return 2
   fi
+  wait_seconds=$((10#$wait_seconds))
 
   body_file=$(mktemp "${TMPDIR:-/tmp}/aws-metadata.XXXXXX") || return 6
-  trap 'rm -f "$body_file"' EXIT
+  trap 'rm -f "$body_file"; if [[ -n ${restart_pid:-} ]] && kill -0 "$restart_pid" 2>/dev/null; then kill "$restart_pid" 2>/dev/null || true; wait "$restart_pid" 2>/dev/null || true; fi' EXIT
   status=$(http_request GET /profile '' "$body_file")
   body=$(<"$body_file")
 
@@ -588,23 +590,31 @@ clear_command() (
       ;;
   esac
 
-  restart_status=0
-  restart_broker || restart_status=$?
-  if [[ $restart_status -ne 0 ]]; then
-    if [[ $restart_status -eq 64 ]]; then
-      print_result "$json" error \
-        'Profile clearing is supported only on macOS and Linux.'
-      return 2
-    fi
-    print_result "$json" error \
-      'Unable to restart the AWS metadata credential broker.'
-    return 6
-  fi
-
   started=$(date +%s)
+  restart_broker &
+  restart_pid=$!
   while :; do
+    if [[ $restart_finished == false ]] && \
+       ! kill -0 "$restart_pid" 2>/dev/null; then
+      restart_status=0
+      wait "$restart_pid" || restart_status=$?
+      restart_pid=''
+      restart_finished=true
+      if [[ $restart_status -eq 64 ]]; then
+        print_result "$json" error \
+          'Profile clearing is supported only on macOS and Linux.'
+        return 2
+      fi
+      if [[ $restart_status -ne 0 ]]; then
+        print_result "$json" error \
+          'Unable to restart the AWS metadata credential broker.'
+        return 6
+      fi
+    fi
+
     status=$(http_request GET /profile '' "$body_file" 1)
     body=$(<"$body_file")
+    now=$(date +%s)
     case $status in
       500)
         if [[ $body == 'profile not set' ]]; then
@@ -616,9 +626,11 @@ clear_command() (
         return 6
         ;;
       200)
-        print_result "$json" error \
-          'A profile was selected while the AWS metadata broker was being cleared.'
-        return 6
+        if ((now - started >= wait_seconds)); then
+          print_result "$json" error \
+            'A profile remained selected after the AWS metadata broker restart.'
+          return 6
+        fi
         ;;
       000|timeout) ;;
       *)
@@ -628,7 +640,6 @@ clear_command() (
         ;;
     esac
 
-    now=$(date +%s)
     if ((now - started >= wait_seconds)); then
       print_result "$json" timeout \
         'Timed out waiting for the AWS metadata broker to return without a selected profile.'
