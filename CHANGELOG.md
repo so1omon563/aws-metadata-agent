@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Changes remain under
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-07-21
+
 ### Added
 
 - An idempotent `aws-metadata clear` command that returns the user broker to
@@ -146,7 +148,8 @@ Other host configurations and Linux container-runtime access remain
 unverified. The metadata endpoint exposes one globally active profile, and the
 active selection must be restored after the broker restarts.
 
-[Unreleased]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.2.0...v0.2.1
