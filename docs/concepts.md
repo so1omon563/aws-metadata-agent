@@ -96,6 +96,12 @@ Native services return after logout or reboot, but the developer must select a
 profile again after the broker restarts. Upstream `aws-runas` owns temporary
 credential refresh and browser-session behavior.
 
+`aws-metadata clear` deliberately restarts only the user broker and verifies
+that it returns to healthy no-profile state. This prevents later metadata
+requests from receiving the previously active identity, but it cannot revoke
+temporary credentials that a consumer already fetched. Upstream credential
+and browser caches remain available for a later explicit selection.
+
 ## Next steps
 
 - [Getting started](getting-started.md)

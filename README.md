@@ -114,12 +114,19 @@ After installation, select a configured upstream profile:
 aws-metadata status
 aws-metadata diagnose
 aws-metadata use example-nonprod
+# When finished with the active identity:
+aws-metadata clear
 ```
 
 A newly started broker with no selected profile is healthy. Configure and test
 the upstream profile first if selection fails; see
 [Configure aws-runas](docs/aws-runas-configuration.md) and the authoritative
 [upstream documentation](https://mmmorris1975.github.io/aws-runas/).
+
+`aws-metadata clear` returns the broker to that healthy no-profile state
+without `sudo`. It does not revoke credentials already fetched by applications
+or delete upstream credential and browser caches; see the
+[CLI reference](docs/cli-reference.md#clear-the-active-profile).
 
 ## Documentation
 

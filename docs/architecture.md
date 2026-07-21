@@ -177,6 +177,10 @@ documentation is authoritative for upstream protocol behavior.
   `profile: null`.
 - Native managers restart failed broker processes, but active profile selection
   is in-process state and returns to empty after broker restart.
+- `aws-metadata clear` uses that state boundary intentionally: it restarts only
+  the developer's broker, waits through the transient forwarding failure, and
+  verifies `/profile` reports no selection. The privileged address, socket, and
+  proxy remain running.
 - The CLI keeps routine error output redacted. Full broker logs remain local
   and potentially sensitive.
 
@@ -205,6 +209,10 @@ profile unless all selection is mediated by an enforcing controller.
 | User AWS configuration | Retained | Retained | Preserved |
 | Upstream credential and browser caches | Retained, subject to expiration | Retained, subject to provider policy | Preserved |
 | Active profile | Cleared | Cleared | Not applicable |
+
+An explicit `aws-metadata clear` has the same effect on active-profile process
+state as a broker restart. It does not delete upstream caches or invalidate
+credentials already copied into a consumer process.
 
 ## Related documentation
 
