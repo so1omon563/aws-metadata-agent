@@ -129,6 +129,12 @@ running endpoint with no selected profile is the expected initial state.
 6. Once ready, an AWS consumer requests the active role name and temporary
    credentials through the normal IMDS credential paths.
 
+`aws-metadata status` reads that same live role-name path for the user's exact
+configuration name and reads `/profile` for the existing detail object. It does
+not persist either response. Because selection is global and unauthenticated,
+concurrent requests can still observe the latest selection between reads; a
+later status call always returns fresh broker state rather than a cached label.
+
 Credential expiration and refresh belong to upstream `aws-runas`. A valid
 browser session can allow silent renewal; an expired provider session can
 require new interaction. Browser authentication and the later AWS STS exchange

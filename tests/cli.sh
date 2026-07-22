@@ -66,7 +66,7 @@ assert_request_timeout() {
 
   : >"$CURL_MAX_TIME_LOG"
   MOCK_CURL_MAX_TIME_LOG="$CURL_MAX_TIME_LOG" "$@" >/dev/null 2>&1
-  actual=$(tail -n 1 "$CURL_MAX_TIME_LOG")
+  actual=$(head -n 1 "$CURL_MAX_TIME_LOG")
   if [[ $actual != "$expected" ]]; then
     printf 'Expected request timeout %s, received %s: %s\n' \
       "$expected" "$actual" "$*" >&2
@@ -97,13 +97,44 @@ assert_service_call() {
   fi
 }
 
-MOCK_CURL_STATUS=200 assert_exit 0 "$CLI" profile test-profile --no-open
+MOCK_CURL_STATUS=200 MOCK_CURL_BODY='{"role_arn":"example-role"}' \
+  assert_exit 0 "$CLI" profile test-profile --no-open
+
+status_output=$(MOCK_CURL_STATUS=200 MOCK_CURL_PROFILE_NAME=personal \
+  MOCK_CURL_BODY='{"role_arn":"example-role"}' "$CLI" status)
+if [[ $status_output != *'Active profile: personal'* ]] ||
+   [[ $status_output != *'Profile details: {"role_arn":"example-role"}'* ]]; then
+  printf 'Unexpected named-profile status output: %s\n' "$status_output" >&2
+  exit 1
+fi
+
+status_output=$(MOCK_CURL_STATUS=200 MOCK_CURL_PROFILE_NAME=personal \
+  MOCK_CURL_BODY='{"role_arn":"different-role"}' "$CLI" status --json)
+if [[ $status_output != \
+  '{"state":"running","endpoint":"http://127.0.0.1:9876","profile_name":"personal","profile":{"role_arn":"different-role"}}' ]]; then
+  printf 'Unexpected named-profile JSON status: %s\n' "$status_output" >&2
+  exit 1
+fi
+
+status_output=$(MOCK_CURL_STATUS=200 MOCK_CURL_PROFILE_NAME_STATUS=000 \
+  MOCK_CURL_BODY='{"role_arn":"example-role"}' "$CLI" status --json)
+if [[ $status_output != \
+  '{"state":"running","endpoint":"http://127.0.0.1:9876","profile_name":null,"profile":{"role_arn":"example-role"}}' ]]; then
+  printf 'Unexpected unavailable-name status output: %s\n' "$status_output" >&2
+  exit 1
+fi
+
 MOCK_CURL_STATUS=200 assert_exit 0 "$CLI" use test-profile
 MOCK_CURL_STATUS=401 assert_exit 4 "$CLI" use test-profile --no-open
 MOCK_CURL_STATUS=401 assert_exit 4 "$CLI" profile test-profile --no-open
 MOCK_CURL_STATUS=500 assert_exit 6 "$CLI" profile test-profile --no-open
 MOCK_CURL_STATUS=000 assert_exit 3 "$CLI" profile test-profile --no-open
-MOCK_CURL_STATUS=200 assert_exit 0 "$CLI" status --json
+status_output=$(MOCK_CURL_STATUS=200 "$CLI" status --json)
+if [[ $status_output != \
+  '{"state":"running","endpoint":"http://127.0.0.1:9876","profile_name":"test-profile","profile":{"name":"test-profile"}}' ]]; then
+  printf 'Unexpected active-profile JSON status: %s\n' "$status_output" >&2
+  exit 1
+fi
 MOCK_CURL_STATUS=500 MOCK_CURL_BODY='profile not set' \
   assert_exit 0 "$CLI" status --json
 MOCK_CURL_STATUS=500 MOCK_CURL_BODY='unexpected failure' \
@@ -349,11 +380,17 @@ assert_curl_calls 1
 status_output=$(MOCK_CURL_STATUS=500 MOCK_CURL_BODY='profile not set' \
   "$CLI" status --json)
 if [[ $status_output != \
-  '{"state":"running","endpoint":"http://127.0.0.1:9876","profile":null}' ]]; then
+  '{"state":"running","endpoint":"http://127.0.0.1:9876","profile_name":null,"profile":null}' ]]; then
   printf 'Unexpected empty-profile status output: %s\n' "$status_output" >&2
   exit 1
 fi
 assert_exit 2 "$CLI" profile
+
+env -u HOME -u XDG_STATE_HOME -u AWS_METADATA_STATE_DIR \
+  AWS_METADATA_VERSION_FILE="$PROJECT_DIR/VERSION" \
+  "$CLI" version >/dev/null
+env -u HOME -u XDG_STATE_HOME -u AWS_METADATA_STATE_DIR \
+  "$CLI" help >/dev/null
 
 expected_version=$(<"$PROJECT_DIR/VERSION")
 if [[ ! $expected_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then

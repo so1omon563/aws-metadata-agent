@@ -5,6 +5,7 @@ set -u
 output_file=''
 method=GET
 max_time=''
+request_url=''
 response_body=${MOCK_CURL_BODY:-}
 response_status=${MOCK_CURL_STATUS:-200}
 
@@ -26,7 +27,7 @@ while (($#)); do
       shift
       ;;
     --silent|--show-error) ;;
-    http://*) ;;
+    http://*) request_url=$1 ;;
   esac
   shift
 done
@@ -45,6 +46,12 @@ if [[ -n ${MOCK_CURL_RESPONSE_QUEUE:-} &&
   command tail -n +2 "$MOCK_CURL_RESPONSE_QUEUE" \
     >"${MOCK_CURL_RESPONSE_QUEUE}.next"
   command mv "${MOCK_CURL_RESPONSE_QUEUE}.next" "$MOCK_CURL_RESPONSE_QUEUE"
+fi
+
+if [[ $method == GET &&
+      $request_url == */latest/meta-data/iam/security-credentials/ ]]; then
+  response_status=${MOCK_CURL_PROFILE_NAME_STATUS:-$response_status}
+  response_body=${MOCK_CURL_PROFILE_NAME:-test-profile}
 fi
 
 if [[ -n ${MOCK_CURL_REQUIRED_TIMEOUT:-} ]] &&

@@ -82,12 +82,22 @@ aws-metadata status --json
 Expected healthy no-profile JSON is:
 
 ```json
-{"state":"running","endpoint":"http://169.254.169.254","profile":null}
+{"state":"running","endpoint":"http://169.254.169.254","profile_name":null,"profile":null}
 ```
 
-When a real profile is active, `status --json` can include upstream profile
-fields such as role or authentication URLs. Do not treat that output as safe
-to paste into a public issue.
+When a profile is active, status reads the user-defined upstream profile name
+from the standard IMDS role-name path and preserves the live details returned
+by the upstream `/profile` endpoint:
+
+```json
+{"state":"running","endpoint":"http://169.254.169.254","profile_name":"example-nonprod","profile":{"auth_url":"","client_id":"","external_id":"","jump_role":"","redirect_uri":"","role_arn":"","username":""}}
+```
+
+No profile name or detail object is persisted by the agent. If the live
+role-name request is unavailable, `profile_name` is `null` while the available
+profile details remain visible. The `profile` object can include role or
+authentication URLs. Do not treat status output as safe to paste into a public
+issue.
 
 ## Clear the active profile
 
