@@ -10,6 +10,7 @@ upstream `aws-runas` broker. Normal profile changes do not require `sudo`.
 | `use PROFILE` | A human is selecting an upstream profile. | Opens the browser when required and waits 300 seconds by default. |
 | `profile PROFILE` | Automation is selecting a profile. | Does not open a browser or wait by default; use explicit flags. |
 | `clear` | Stop the broker from vending the selected profile to new metadata requests. | Restarts only the user broker when needed and verifies healthy no-profile state. |
+| `active-profile` | Show the selected profile in a shell prompt or status bar. | Prints only the exact live profile name; stays silent when there is nothing to display. |
 | `status` | Check endpoint and active-profile state. | `profile: null` or “No profile is selected” is healthy after startup. |
 | `open` | Open the upstream browser interface. | Opens `http://169.254.169.254`; it does not select a profile. |
 | `refresh` | Open the browser interface for its **Refresh Now** control. | Currently the same operation as `open`; the CLI itself does not force refresh. |
@@ -71,6 +72,25 @@ JSON output contains stable state, message, and profile fields. Unexpected
 broker responses also include a redacted broker classification, the
 `aws-metadata errors` command, and the platform log location. Profile names can
 still be sensitive even when credential values are absent.
+
+## Active profile for shell prompts
+
+```sh
+aws-metadata active-profile
+```
+
+When a profile is selected, `active-profile` performs one live request to the
+standard IMDS role-name path and prints only its exact user-defined name. It
+does not read or print the profile detail object. When no profile is selected,
+the endpoint is unavailable, or the 200 ms request ceiling expires, it prints
+nothing and exits successfully so a prompt does not become noisy or report a
+false command failure. Use `status` when those states must be distinguished.
+
+The lookup is never cached, so a later prompt reflects the broker's current
+process state. Set `AWS_METADATA_ACTIVE_PROFILE_TIMEOUT_SECONDS` only when a
+different bounded deadline is needed. See
+[Shell prompt integration](shell-prompts.md) for Starship, zsh, Bash, and fish
+examples.
 
 ## Status
 

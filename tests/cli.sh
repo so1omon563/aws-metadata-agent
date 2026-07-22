@@ -108,6 +108,42 @@ if [[ $status_output != *'Active profile: personal'* ]] ||
   exit 1
 fi
 
+active_profile_output=$(MOCK_CURL_STATUS=200 MOCK_CURL_PROFILE_NAME=personal \
+  "$CLI" active-profile)
+if [[ $active_profile_output != personal ]]; then
+  printf 'Unexpected active-profile output: %s\n' "$active_profile_output" >&2
+  exit 1
+fi
+
+: >"$CURL_CALL_LOG"
+MOCK_CURL_STATUS=200 MOCK_CURL_PROFILE_NAME=personal \
+  MOCK_CURL_CALL_LOG="$CURL_CALL_LOG" "$CLI" active-profile >/dev/null
+assert_curl_calls 1
+assert_request_timeout 0.2 env MOCK_CURL_STATUS=200 \
+  MOCK_CURL_PROFILE_NAME=personal "$CLI" active-profile
+AWS_METADATA_ACTIVE_PROFILE_TIMEOUT_SECONDS=0.05 \
+  assert_request_timeout 0.05 env MOCK_CURL_STATUS=200 \
+    MOCK_CURL_PROFILE_NAME=personal "$CLI" active-profile
+
+active_profile_output=$(MOCK_CURL_STATUS=200 MOCK_CURL_PROFILE_NAME_EMPTY=true \
+  "$CLI" active-profile)
+if [[ -n $active_profile_output ]]; then
+  printf 'Expected empty inactive profile output, received: %s\n' \
+    "$active_profile_output" >&2
+  exit 1
+fi
+
+active_profile_output=$(MOCK_CURL_STATUS=000 "$CLI" active-profile)
+if [[ -n $active_profile_output ]]; then
+  printf 'Expected empty unavailable profile output, received: %s\n' \
+    "$active_profile_output" >&2
+  exit 1
+fi
+MOCK_CURL_STATUS=200 MOCK_CURL_PROFILE_NAME_EMPTY=true \
+  assert_exit 0 "$CLI" active-profile
+MOCK_CURL_STATUS=000 assert_exit 0 "$CLI" active-profile
+assert_exit 2 "$CLI" active-profile unexpected
+
 status_output=$(MOCK_CURL_STATUS=200 MOCK_CURL_PROFILE_NAME=personal \
   MOCK_CURL_BODY='{"role_arn":"different-role"}' "$CLI" status --json)
 if [[ $status_output != \
