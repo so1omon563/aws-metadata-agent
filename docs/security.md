@@ -96,6 +96,12 @@ uid, home path, binary path, local port, version/schema, CLI ownership, and
 prior Linux linger state. It contains no AWS profile definitions, credentials,
 passwords, tokens, or browser cookies.
 
+The user-owned active-profile status hint contains the user-defined profile
+name and a SHA-256 fingerprint of the live profile details. It is created with
+mode `0600`, never stores the detail fields or credentials, and is ignored when
+its fingerprint does not match the broker. Treat the profile name itself as
+sensitive local configuration.
+
 ## Browser authentication
 
 The macOS broker runs in the developer's GUI launchd domain. Linux browser

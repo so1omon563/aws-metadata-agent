@@ -14,6 +14,7 @@ export AWS_METADATA_VERSION_FILE="$PROJECT_DIR/VERSION"
 TEMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/aws-metadata-cli.XXXXXX")
 readonly TEMP_ROOT
 trap 'rm -rf "$TEMP_ROOT"' EXIT
+export AWS_METADATA_STATE_DIR="$TEMP_ROOT/state"
 readonly CURL_MAX_TIME_LOG="$TEMP_ROOT/curl-max-time"
 readonly CURL_CALL_LOG="$TEMP_ROOT/curl-calls"
 readonly CURL_RESPONSE_QUEUE="$TEMP_ROOT/curl-responses"
@@ -66,7 +67,7 @@ assert_request_timeout() {
 
   : >"$CURL_MAX_TIME_LOG"
   MOCK_CURL_MAX_TIME_LOG="$CURL_MAX_TIME_LOG" "$@" >/dev/null 2>&1
-  actual=$(tail -n 1 "$CURL_MAX_TIME_LOG")
+  actual=$(head -n 1 "$CURL_MAX_TIME_LOG")
   if [[ $actual != "$expected" ]]; then
     printf 'Expected request timeout %s, received %s: %s\n' \
       "$expected" "$actual" "$*" >&2
@@ -97,15 +98,46 @@ assert_service_call() {
   fi
 }
 
-MOCK_CURL_STATUS=200 assert_exit 0 "$CLI" profile test-profile --no-open
+MOCK_CURL_STATUS=200 MOCK_CURL_BODY='{"role_arn":"example-role"}' \
+  assert_exit 0 "$CLI" profile test-profile --no-open
+if grep -Fq 'example-role' "$AWS_METADATA_STATE_DIR/active-profile"; then
+  printf '%s\n' 'Cached profile state contains live profile details.' >&2
+  exit 1
+fi
+
+status_output=$(MOCK_CURL_STATUS=200 \
+  MOCK_CURL_BODY='{"role_arn":"example-role"}' "$CLI" status)
+if [[ $status_output != *'Active profile: test-profile'* ]] ||
+   [[ $status_output != *'Profile details: {"role_arn":"example-role"}'* ]]; then
+  printf 'Unexpected named-profile status output: %s\n' "$status_output" >&2
+  exit 1
+fi
+
+status_output=$(MOCK_CURL_STATUS=200 \
+  MOCK_CURL_BODY='{"role_arn":"different-role"}' "$CLI" status --json)
+if [[ $status_output != \
+  '{"state":"running","endpoint":"http://127.0.0.1:9876","profile_name":null,"profile":{"role_arn":"different-role"}}' ]]; then
+  printf 'Unexpected mismatched-profile status output: %s\n' "$status_output" >&2
+  exit 1
+fi
+
 MOCK_CURL_STATUS=200 assert_exit 0 "$CLI" use test-profile
 MOCK_CURL_STATUS=401 assert_exit 4 "$CLI" use test-profile --no-open
 MOCK_CURL_STATUS=401 assert_exit 4 "$CLI" profile test-profile --no-open
 MOCK_CURL_STATUS=500 assert_exit 6 "$CLI" profile test-profile --no-open
 MOCK_CURL_STATUS=000 assert_exit 3 "$CLI" profile test-profile --no-open
-MOCK_CURL_STATUS=200 assert_exit 0 "$CLI" status --json
+status_output=$(MOCK_CURL_STATUS=200 "$CLI" status --json)
+if [[ $status_output != \
+  '{"state":"running","endpoint":"http://127.0.0.1:9876","profile_name":"test-profile","profile":{"name":"test-profile"}}' ]]; then
+  printf 'Unexpected active-profile JSON status: %s\n' "$status_output" >&2
+  exit 1
+fi
 MOCK_CURL_STATUS=500 MOCK_CURL_BODY='profile not set' \
   assert_exit 0 "$CLI" status --json
+if [[ -e $AWS_METADATA_STATE_DIR/active-profile ]]; then
+  printf '%s\n' 'No-profile status did not remove cached profile state.' >&2
+  exit 1
+fi
 MOCK_CURL_STATUS=500 MOCK_CURL_BODY='unexpected failure' \
   assert_exit 6 "$CLI" status --json
 
@@ -267,7 +299,7 @@ printf '500|%s\n200|\n' "$TRANSIENT_SAML_STS_TIMEOUT" >"$CURL_RESPONSE_QUEUE"
 MOCK_CURL_CALL_LOG="$CURL_CALL_LOG" \
   MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
   assert_exit 0 "$CLI" use test-profile
-assert_curl_calls 2
+assert_curl_calls 3
 
 # The same one-retry recovery applies when the first request asks the CLI to
 # open the browser and a later polling request receives the transient STS 408.
@@ -277,7 +309,7 @@ printf '401|\n500|%s\n200|\n' \
 MOCK_CURL_CALL_LOG="$CURL_CALL_LOG" \
   MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
   assert_exit 0 "$CLI" use test-profile
-assert_curl_calls 3
+assert_curl_calls 4
 
 # A repeated transient response is still bounded to one retry.
 : >"$CURL_CALL_LOG"
@@ -349,7 +381,7 @@ assert_curl_calls 1
 status_output=$(MOCK_CURL_STATUS=500 MOCK_CURL_BODY='profile not set' \
   "$CLI" status --json)
 if [[ $status_output != \
-  '{"state":"running","endpoint":"http://127.0.0.1:9876","profile":null}' ]]; then
+  '{"state":"running","endpoint":"http://127.0.0.1:9876","profile_name":null,"profile":null}' ]]; then
   printf 'Unexpected empty-profile status output: %s\n' "$status_output" >&2
   exit 1
 fi

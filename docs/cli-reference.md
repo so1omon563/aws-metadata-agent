@@ -82,12 +82,23 @@ aws-metadata status --json
 Expected healthy no-profile JSON is:
 
 ```json
-{"state":"running","endpoint":"http://169.254.169.254","profile":null}
+{"state":"running","endpoint":"http://169.254.169.254","profile_name":null,"profile":null}
 ```
 
-When a real profile is active, `status --json` can include upstream profile
-fields such as role or authentication URLs. Do not treat that output as safe
-to paste into a public issue.
+After a successful selection through `aws-metadata use` or
+`aws-metadata profile`, status preserves the user-defined upstream profile name
+alongside the live details returned by `aws-runas`:
+
+```json
+{"state":"running","endpoint":"http://169.254.169.254","profile_name":"example-nonprod","profile":{"auth_url":"","client_id":"","external_id":"","jump_role":"","redirect_uri":"","role_arn":"","username":""}}
+```
+
+The name and a SHA-256 fingerprint of the details are stored in mode-`0600`
+private user state; the detail object itself is not duplicated there. The name
+is reported only while that fingerprint matches the live broker response. A
+profile selected directly through the upstream HTTP API can therefore have
+`profile_name: null`. The `profile` object can include role or authentication
+URLs. Do not treat status output as safe to paste into a public issue.
 
 ## Clear the active profile
 
@@ -155,6 +166,7 @@ The CLI supports bounded diagnostic and test overrides:
 | `AWS_METADATA_CLEAR_WAIT_SECONDS` | Default wait for the broker to return after `clear`. | `15` |
 | `AWS_METADATA_REQUEST_TIMEOUT` | Explicit HTTP request deadline. | `15`, extended for interactive waits |
 | `AWS_METADATA_CONNECT_TIMEOUT` | Endpoint connection timeout. | `2` |
+| `AWS_METADATA_STATE_DIR` | User-private active-profile name state, primarily overridden by tests. | `$XDG_STATE_HOME/aws-metadata-agent` or `~/.local/state/aws-metadata-agent` |
 
 After a full supported install, applications and routine CLI use should not
 need a custom metadata endpoint.
