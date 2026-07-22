@@ -5,6 +5,12 @@ All notable changes to this project are documented here. Changes remain under
 
 ## [Unreleased]
 
+### Fixed
+
+- `aws-metadata clear` no longer prints transient curl transport errors while
+  waiting for the user broker to restart, while initial endpoint failures
+  retain their diagnostics.
+
 ## [0.3.3] - 2026-07-22
 
 ### Added
