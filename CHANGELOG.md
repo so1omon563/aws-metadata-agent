@@ -5,6 +5,14 @@ All notable changes to this project are documented here. Changes remain under
 
 ## [Unreleased]
 
+### Added
+
+- `aws-metadata active-profile` prints only the exact live upstream profile
+  name for Starship, zsh, Bash, fish, editor, and status-bar integrations. The
+  uncached lookup uses one bounded IMDS role-name request, stays silent when
+  inactive or unavailable, and prevents invalid timeout overrides from
+  disabling its prompt-safety deadline.
+
 ## [0.3.2] - 2026-07-22
 
 ### Added
