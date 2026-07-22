@@ -114,6 +114,8 @@ After installation, select a configured upstream profile:
 aws-metadata status
 aws-metadata diagnose
 aws-metadata use example-nonprod
+# Print only the live name for shell-prompt integrations:
+aws-metadata active-profile
 # When finished with the active identity:
 aws-metadata clear
 ```
@@ -127,6 +129,8 @@ the upstream profile first if selection fails; see
 without `sudo`. It does not revoke credentials already fetched by applications
 or delete upstream credential and browser caches; see the
 [CLI reference](docs/cli-reference.md#clear-the-active-profile).
+Use the prompt-safe `active-profile` command with
+[Starship, zsh, Bash, or fish](docs/shell-prompts.md).
 
 ## Documentation
 

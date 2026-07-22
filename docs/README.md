@@ -23,6 +23,8 @@ exact contract.
   SAML, OIDC, and consumer compatibility profiles.
 - [Consumer recipes](consumers.md) — connect AWS CLI, SDKs, VS Code, coding
   agents, containers, and GUI automation.
+- [Shell prompt integration](shell-prompts.md) — display the exact live active
+  profile in Starship, zsh, Bash, or fish.
 - [Stream Deck integration](stream-deck.md) — invoke the CLI from a validated
   macOS GUI action.
 - [Troubleshooting](troubleshooting.md) — start from a visible symptom and

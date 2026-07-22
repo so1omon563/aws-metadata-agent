@@ -6,6 +6,7 @@ output_file=''
 method=GET
 max_time=''
 request_url=''
+profile_name_request=false
 response_body=${MOCK_CURL_BODY:-}
 response_status=${MOCK_CURL_STATUS:-200}
 
@@ -50,8 +51,13 @@ fi
 
 if [[ $method == GET &&
       $request_url == */latest/meta-data/iam/security-credentials/ ]]; then
+  profile_name_request=true
   response_status=${MOCK_CURL_PROFILE_NAME_STATUS:-$response_status}
-  response_body=${MOCK_CURL_PROFILE_NAME:-test-profile}
+  if [[ ${MOCK_CURL_PROFILE_NAME_EMPTY:-false} == true ]]; then
+    response_body=''
+  else
+    response_body=${MOCK_CURL_PROFILE_NAME:-test-profile}
+  fi
 fi
 
 if [[ -n ${MOCK_CURL_REQUIRED_TIMEOUT:-} ]] &&
@@ -64,7 +70,9 @@ if [[ $response_status == 000 ]]; then
 fi
 
 if [[ -n $output_file ]]; then
-  if [[ $method == GET ]]; then
+  if [[ $profile_name_request == true ]]; then
+    printf '%s' "$response_body" >"$output_file"
+  elif [[ $method == GET ]]; then
     if [[ -n $response_body ]]; then
       printf '%s' "$response_body" >"$output_file"
     else
