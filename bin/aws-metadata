@@ -6,7 +6,7 @@ set -o pipefail
 readonly BASE_URL="${AWS_METADATA_URL:-http://169.254.169.254}"
 readonly DEFAULT_WAIT="${AWS_METADATA_WAIT_SECONDS:-0}"
 readonly DEFAULT_CLEAR_WAIT="${AWS_METADATA_CLEAR_WAIT_SECONDS:-15}"
-readonly DEFAULT_ACTIVE_PROFILE_TIMEOUT="${AWS_METADATA_ACTIVE_PROFILE_TIMEOUT_SECONDS:-0.2}"
+readonly DEFAULT_ACTIVE_PROFILE_TIMEOUT=0.2
 readonly AUTH_REQUEST_GRACE_SECONDS=5
 readonly BROKER_LABEL=com.github.so1omon563.aws-metadata-agent.broker
 readonly BROKER_UNIT=aws-metadata-agent.service
@@ -539,17 +539,23 @@ status_command() (
 
 active_profile_command() (
   local profile_name_file status profile_name
+  local request_timeout=${AWS_METADATA_ACTIVE_PROFILE_TIMEOUT_SECONDS:-$DEFAULT_ACTIVE_PROFILE_TIMEOUT}
 
   if (($#)); then
     printf 'Unknown active-profile option: %s\n' "$1" >&2
     return 2
   fi
 
+  if ! [[ $request_timeout =~ ^[0-9]+([.][0-9]+)?$ &&
+          $request_timeout =~ [1-9] ]]; then
+    request_timeout=$DEFAULT_ACTIVE_PROFILE_TIMEOUT
+  fi
+
   profile_name_file=$(mktemp "${TMPDIR:-/tmp}/aws-metadata.XXXXXX" 2>/dev/null) ||
     return 0
   trap 'rm -f "$profile_name_file"' EXIT
   status=$(http_request GET "$PROFILE_NAME_PATH" '' "$profile_name_file" \
-    "$DEFAULT_ACTIVE_PROFILE_TIMEOUT" 2>/dev/null)
+    "$request_timeout" 2>/dev/null)
 
   if [[ $status == 200 ]]; then
     profile_name=$(<"$profile_name_file")

@@ -124,6 +124,15 @@ assert_request_timeout 0.2 env MOCK_CURL_STATUS=200 \
 AWS_METADATA_ACTIVE_PROFILE_TIMEOUT_SECONDS=0.05 \
   assert_request_timeout 0.05 env MOCK_CURL_STATUS=200 \
     MOCK_CURL_PROFILE_NAME=personal "$CLI" active-profile
+AWS_METADATA_ACTIVE_PROFILE_TIMEOUT_SECONDS=0 \
+  assert_request_timeout 0.2 env MOCK_CURL_STATUS=200 \
+    MOCK_CURL_PROFILE_NAME=personal "$CLI" active-profile
+AWS_METADATA_ACTIVE_PROFILE_TIMEOUT_SECONDS=-1 \
+  assert_request_timeout 0.2 env MOCK_CURL_STATUS=200 \
+    MOCK_CURL_PROFILE_NAME=personal "$CLI" active-profile
+AWS_METADATA_ACTIVE_PROFILE_TIMEOUT_SECONDS=invalid \
+  assert_request_timeout 0.2 env MOCK_CURL_STATUS=200 \
+    MOCK_CURL_PROFILE_NAME=personal "$CLI" active-profile
 
 active_profile_output=$(MOCK_CURL_STATUS=200 MOCK_CURL_PROFILE_NAME_EMPTY=true \
   "$CLI" active-profile)

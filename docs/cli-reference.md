@@ -88,7 +88,8 @@ false command failure. Use `status` when those states must be distinguished.
 
 The lookup is never cached, so a later prompt reflects the broker's current
 process state. Set `AWS_METADATA_ACTIVE_PROFILE_TIMEOUT_SECONDS` only when a
-different bounded deadline is needed. See
+different strictly positive bounded deadline is needed; zero, negative, or
+malformed values fall back to 200 ms rather than disabling the timeout. See
 [Shell prompt integration](shell-prompts.md) for Starship, zsh, Bash, and fish
 examples.
 
