@@ -5,6 +5,13 @@ All notable changes to this project are documented here. Changes remain under
 
 ## [Unreleased]
 
+### Added
+
+- `aws-metadata status` now reports the exact active upstream profile name
+  alongside the existing live profile details in text and JSON output. The
+  name is read from the standard IMDS role-name path without persisting profile
+  state.
+
 ## [0.3.1] - 2026-07-21
 
 ### Added
