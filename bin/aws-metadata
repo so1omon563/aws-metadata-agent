@@ -12,8 +12,7 @@ readonly BROKER_UNIT=aws-metadata-agent.service
 readonly VERSION_FILE="${AWS_METADATA_VERSION_FILE:-/usr/local/libexec/aws-metadata-agent/VERSION}"
 readonly PACKAGE_ROOT="${AWS_METADATA_PACKAGE_ROOT:-}"
 readonly PACKAGE_CLI="${AWS_METADATA_PACKAGE_CLI:-}"
-readonly PROFILE_STATE_DIR="${AWS_METADATA_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/aws-metadata-agent}"
-readonly PROFILE_STATE_FILE="$PROFILE_STATE_DIR/active-profile"
+readonly PROFILE_NAME_PATH=/latest/meta-data/iam/security-credentials/
 
 usage() {
   cat <<'EOF'
@@ -132,64 +131,6 @@ json_escape() {
   value=${value//$'\r'/\\r}
   value=${value//$'\t'/\\t}
   printf '%s' "$value"
-}
-
-remember_active_profile() {
-  local profile=$1
-  local body_file status state_temp details details_digest
-
-  forget_active_profile
-  body_file=$(mktemp "${TMPDIR:-/tmp}/aws-metadata.XXXXXX") || return 0
-  status=$(http_request GET /profile '' "$body_file" 2)
-  if [[ $status != 200 ]] || ! command mkdir -p "$PROFILE_STATE_DIR"; then
-    command rm -f "$body_file"
-    return 0
-  fi
-  details=$(<"$body_file")
-  details_digest=$(printf '%s' "$details" | profile_details_digest) || {
-    command rm -f "$body_file"
-    return 0
-  }
-
-  command chmod 700 "$PROFILE_STATE_DIR" 2>/dev/null || true
-  state_temp=$(mktemp "$PROFILE_STATE_DIR/.active-profile.XXXXXX") || {
-    command rm -f "$body_file"
-    return 0
-  }
-
-  if ! printf '%s\n%s\n' "$profile" "$details_digest" >"$state_temp"; then
-    command rm -f "$body_file" "$state_temp"
-    return 0
-  fi
-  command chmod 600 "$state_temp" 2>/dev/null || true
-  command mv "$state_temp" "$PROFILE_STATE_FILE"
-  command rm -f "$body_file"
-}
-
-profile_details_digest() {
-  if command -v shasum >/dev/null 2>&1; then
-    command shasum -a 256 | command awk '{print $1}'
-  elif command -v sha256sum >/dev/null 2>&1; then
-    command sha256sum | command awk '{print $1}'
-  else
-    return 1
-  fi
-}
-
-active_profile_name() {
-  local live_details=$1
-  local saved_name saved_digest live_digest
-
-  [[ -r $PROFILE_STATE_FILE ]] || return 1
-  IFS= read -r saved_name <"$PROFILE_STATE_FILE" || return 1
-  saved_digest=$(command sed -n '2p' "$PROFILE_STATE_FILE")
-  live_digest=$(printf '%s' "$live_details" | profile_details_digest) || return 1
-  [[ -n $saved_digest && $saved_digest == "$live_digest" ]] || return 1
-  printf '%s' "$saved_name"
-}
-
-forget_active_profile() {
-  command rm -f "$PROFILE_STATE_FILE" 2>/dev/null || true
 }
 
 print_result() {
@@ -439,7 +380,6 @@ profile_command() (
   fi
   case $status in
     200|204)
-      remember_active_profile "$profile"
       print_result "$json" ready "AWS metadata profile set to $profile." "$profile"
       return 0
       ;;
@@ -492,7 +432,6 @@ profile_command() (
     fi
     case $status in
       200|204)
-        remember_active_profile "$profile"
         print_result "$json" ready "AWS metadata profile set to $profile." "$profile"
         return 0
         ;;
@@ -525,7 +464,8 @@ profile_command() (
 
 status_command() (
   local json=false
-  local body_file status body profile_name=''
+  local body_file profile_name_file status body profile_name_status
+  local profile_name=''
 
   if [[ ${1:-} == --json ]]; then
     json=true
@@ -537,13 +477,21 @@ status_command() (
   fi
 
   body_file=$(mktemp "${TMPDIR:-/tmp}/aws-metadata.XXXXXX") || return 6
-  trap 'rm -f "$body_file"' EXIT
+  profile_name_file=$(mktemp "${TMPDIR:-/tmp}/aws-metadata.XXXXXX") || {
+    command rm -f "$body_file"
+    return 6
+  }
+  trap 'rm -f "$body_file" "$profile_name_file"' EXIT
   status=$(http_request GET /profile '' "$body_file")
   body=$(<"$body_file")
 
   case $status in
     200)
-      profile_name=$(active_profile_name "$body" || true)
+      profile_name_status=$(http_request \
+        GET "$PROFILE_NAME_PATH" '' "$profile_name_file")
+      if [[ $profile_name_status == 200 ]]; then
+        profile_name=$(<"$profile_name_file")
+      fi
       if [[ $json == true ]]; then
         printf '{"state":"running","endpoint":"%s","profile_name":' \
           "$(json_escape "$BASE_URL")"
@@ -561,7 +509,6 @@ status_command() (
       ;;
     500)
       if [[ $body == 'profile not set' ]]; then
-        forget_active_profile
         if [[ $json == true ]]; then
           printf '{"state":"running","endpoint":"%s","profile_name":null,"profile":null}\n' \
             "$(json_escape "$BASE_URL")"
@@ -642,7 +589,6 @@ clear_command() (
     200) ;;
     500)
       if [[ $body == 'profile not set' ]]; then
-        forget_active_profile
         print_result "$json" clear 'No AWS metadata profile is selected.'
         return 0
       fi
@@ -690,7 +636,6 @@ clear_command() (
     case $status in
       500)
         if [[ $body == 'profile not set' ]]; then
-          forget_active_profile
           print_result "$json" clear 'AWS metadata profile cleared.'
           return 0
         fi

@@ -63,14 +63,6 @@ The configuration file is root-owned mode `0644` because the user broker must
 read it. It contains no AWS profiles, credentials, passwords, tokens, or
 browser state.
 
-Successful CLI selection also creates
-`$XDG_STATE_HOME/aws-metadata-agent/active-profile` (defaulting to
-`~/.local/state/aws-metadata-agent/active-profile`) as user-owned mode `0600`
-state. It contains the exact user-defined profile name and a SHA-256 fingerprint
-of the live `/profile` response, not the response fields themselves. `status`
-uses the fingerprint to avoid attaching a stale name to different live profile
-details and removes the state after observing the broker's no-profile state.
-
 A source/direct installation owns `/usr/local/bin/aws-metadata`. A Homebrew
 installation keeps the command under the Homebrew prefix and uses the same
 root-owned service layout without transferring package-command ownership to
@@ -129,15 +121,19 @@ running endpoint with no selected profile is the expected initial state.
 
 1. `aws-metadata use PROFILE` posts the upstream profile name to `/profile`.
 2. HTTP 200 or 204 means upstream credentials are ready.
-3. The CLI reads the live `/profile` response and stores its SHA-256 fingerprint
-   with the user-defined name for later status display.
-4. HTTP 401 means SAML/OIDC, password, or MFA interaction is required.
-5. Human-oriented selection opens the metadata browser interface and polls the
+3. HTTP 401 means SAML/OIDC, password, or MFA interaction is required.
+4. Human-oriented selection opens the metadata browser interface and polls the
    same profile request for a bounded period.
-6. Automation-oriented selection returns a stable nonzero exit unless the
+5. Automation-oriented selection returns a stable nonzero exit unless the
    caller explicitly opts into browser interaction and waiting.
-7. Once ready, an AWS consumer requests the active role name and temporary
+6. Once ready, an AWS consumer requests the active role name and temporary
    credentials through the normal IMDS credential paths.
+
+`aws-metadata status` reads that same live role-name path for the user's exact
+configuration name and reads `/profile` for the existing detail object. It does
+not persist either response. Because selection is global and unauthenticated,
+concurrent requests can still observe the latest selection between reads; a
+later status call always returns fresh broker state rather than a cached label.
 
 Credential expiration and refresh belong to upstream `aws-runas`. A valid
 browser session can allow silent renewal; an expired provider session can
