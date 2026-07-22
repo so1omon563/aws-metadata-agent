@@ -17,6 +17,7 @@ trap 'rm -rf "$TEMP_ROOT"' EXIT
 readonly CURL_MAX_TIME_LOG="$TEMP_ROOT/curl-max-time"
 readonly CURL_CALL_LOG="$TEMP_ROOT/curl-calls"
 readonly CURL_RESPONSE_QUEUE="$TEMP_ROOT/curl-responses"
+readonly CLEAR_STDERR="$TEMP_ROOT/clear-stderr"
 readonly TRANSIENT_SAML_STS_TIMEOUT='failed to refresh cached credentials, operation error STS: AssumeRoleWithSAML, https response error StatusCode: 408, RequestID: , api error UnknownError: UnknownError'
 readonly SERVICE_MOCKS="$TEMP_ROOT/service-mocks"
 readonly SERVICE_CALL_LOG="$TEMP_ROOT/service-calls"
@@ -199,16 +200,18 @@ fi
 
 # macOS restarts only the user broker and tolerates its transient outage.
 : >"$SERVICE_CALL_LOG"
+: >"$CLEAR_STDERR"
 printf '200|{"name":"sensitive-profile"}\n000|\n500|profile not set\n' \
   >"$CURL_RESPONSE_QUEUE"
 clear_output=$(PATH="$SERVICE_MOCKS:$PATH" MOCK_UNAME_S=Darwin \
   MOCK_SERVICE_CALL_LOG="$SERVICE_CALL_LOG" \
   MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
-  "$CLI" clear --wait 2 --json)
-if [[ $clear_output != \
-  '{"state":"clear","message":"AWS metadata profile cleared."}' ]] ||
-   [[ $clear_output == *'sensitive-profile'* ]]; then
+  MOCK_CURL_ERROR='curl: (56) Recv failure: Connection reset by peer' \
+  "$CLI" clear --wait 2 2>"$CLEAR_STDERR")
+if [[ $clear_output != 'AWS metadata profile cleared.' ]] ||
+   [[ $clear_output == *'sensitive-profile'* ]] || [[ -s $CLEAR_STDERR ]]; then
   printf 'Unexpected macOS clear result: %s\n' "$clear_output" >&2
+  cat "$CLEAR_STDERR" >&2
   exit 1
 fi
 assert_service_call \
@@ -232,8 +235,20 @@ assert_service_call 'systemctl --user restart aws-metadata-agent.service'
 
 # Clear reports deterministic failures without exposing the active profile.
 : >"$SERVICE_CALL_LOG"
-MOCK_CURL_STATUS=000 PATH="$SERVICE_MOCKS:$PATH" MOCK_UNAME_S=Darwin \
-  MOCK_SERVICE_CALL_LOG="$SERVICE_CALL_LOG" assert_exit 3 "$CLI" clear
+: >"$CLEAR_STDERR"
+clear_error_exit=0
+MOCK_CURL_STATUS=000 \
+  MOCK_CURL_ERROR='curl: (7) Failed to connect to metadata endpoint' \
+  PATH="$SERVICE_MOCKS:$PATH" MOCK_UNAME_S=Darwin \
+  MOCK_SERVICE_CALL_LOG="$SERVICE_CALL_LOG" \
+  "$CLI" clear >/dev/null 2>"$CLEAR_STDERR" || clear_error_exit=$?
+if [[ $clear_error_exit -ne 3 ]] ||
+   [[ $(<"$CLEAR_STDERR") != \
+     'curl: (7) Failed to connect to metadata endpoint' ]]; then
+  printf 'Unexpected unavailable clear result.\n' >&2
+  cat "$CLEAR_STDERR" >&2
+  exit 1
+fi
 [[ ! -s $SERVICE_CALL_LOG ]]
 
 : >"$SERVICE_CALL_LOG"

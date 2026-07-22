@@ -660,7 +660,7 @@ clear_command() (
       fi
     fi
 
-    status=$(http_request GET /profile '' "$body_file" 1)
+    status=$(http_request GET /profile '' "$body_file" 1 2>/dev/null)
     body=$(<"$body_file")
     now=$(date +%s)
     case $status in

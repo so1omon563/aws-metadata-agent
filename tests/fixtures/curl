@@ -66,6 +66,9 @@ if [[ -n ${MOCK_CURL_REQUIRED_TIMEOUT:-} ]] &&
 fi
 
 if [[ $response_status == 000 ]]; then
+  if [[ -n ${MOCK_CURL_ERROR:-} ]]; then
+    printf '%s\n' "$MOCK_CURL_ERROR" >&2
+  fi
   exit 7
 fi
 
