@@ -130,7 +130,8 @@ without `sudo`. It does not revoke credentials already fetched by applications
 or delete upstream credential and browser caches; see the
 [CLI reference](docs/cli-reference.md#clear-the-active-profile).
 Use the prompt-safe `active-profile` command with
-[Starship, zsh, Bash, or fish](docs/shell-prompts.md).
+[Starship, zsh, Bash, fish, tmux, editors, or status bars](docs/shell-prompts.md),
+including project-scoped and production-warning patterns.
 
 ## Documentation
 
