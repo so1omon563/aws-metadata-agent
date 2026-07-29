@@ -5,6 +5,12 @@ All notable changes to this project are documented here. Changes remain under
 
 ## [Unreleased]
 
+### Added
+
+- `aws-metadata refresh` now renews the currently selected profile through the
+  upstream cache-clear and reselection path, requesting browser authentication
+  only when required and never printing the selected profile.
+
 ## [0.4.0] - 2026-07-28
 
 ### Added

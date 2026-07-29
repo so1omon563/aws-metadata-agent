@@ -17,6 +17,7 @@ boundary failed.
 | The upstream profile is missing or fails directly | [Profile not found or upstream profile fails](#profile-not-found-or-upstream-profile-fails) |
 | `aws-metadata use` returns an error | [Endpoint responds but profile selection fails](#endpoint-responds-but-profile-selection-fails) |
 | A browser does not open or authentication expires | [Browser does not open or authentication times out](#browser-does-not-open-or-authentication-times-out) |
+| A selected profile starts returning expired or unusable credentials | [Selected profile needs credential renewal](#selected-profile-needs-credential-renewal) |
 | AWS returns the wrong account or role | [Credentials are for the wrong role](#credentials-are-for-the-wrong-role) |
 | Terminal verification works but VS Code or another GUI fails | [CLI works but a GUI application fails](#cli-works-but-a-gui-application-fails) |
 | The host works but Docker or another container does not | [Host works but a container fails](#host-works-but-a-container-fails) |
@@ -153,6 +154,26 @@ A successful browser login and the AWS STS credential exchange are separate
 steps. The browser can persist its session even if the first STS request fails.
 The agent retries one confirmed SAML STS 408 transition once; unrelated errors
 are not retried.
+
+## Selected profile needs credential renewal
+
+Expired role credentials normally renew on the next request while the
+underlying authentication session remains valid. If a consumer command fails
+while the profile is still selected, run:
+
+```sh
+aws-metadata refresh
+```
+
+The command forces the upstream cache-and-reselection path without a profile
+argument. It opens the browser only if identity-provider or MFA interaction is
+required. If refresh succeeds but the same application continues failing, its
+own credential cache may still hold the previous credentials; retry, sign out,
+or reconnect using that application's documented cache-reset procedure.
+
+For noninteractive diagnosis, use `aws-metadata refresh --no-open --json`.
+Exit `4` means human authentication is required. Do not replace this workflow
+with background polling, exported credentials, or manual cache deletion.
 
 ## Credentials are for the wrong role
 

@@ -13,7 +13,7 @@ upstream `aws-runas` broker. Normal profile changes do not require `sudo`.
 | `active-profile` | Show the selected profile in a shell prompt or status bar. | Prints only the exact live profile name; stays silent when there is nothing to display. |
 | `status` | Check endpoint and active-profile state. | `profile: null` or “No profile is selected” is healthy after startup. |
 | `open` | Open the upstream browser interface. | Opens the endpoint for the installed mode; it does not select a profile. |
-| `refresh` | Open the browser interface for its **Refresh Now** control. | Currently the same operation as `open`; the CLI itself does not force refresh. |
+| `refresh` | Force renewal of the currently selected upstream profile. | Clears the upstream credential cache, reselects the active profile, and opens the browser only when authentication is required. |
 | `errors` | Classify recent authentication failures safely. | Reads at most 200 broker log lines and prints redacted summaries for the last 10 matches. |
 | `logs` | Deliberately inspect the full live broker log. | Full logs may contain sensitive profile, identity, or credential data. |
 | `diagnose` | Check installation and service boundaries. | Tests the mode-correct endpoint, broker service, log location, and `aws-runas`; system mode also checks the link-local address. |
@@ -153,6 +153,37 @@ another local caller can select a profile again immediately.
 | 3 | The metadata endpoint was unavailable before any restart was attempted. |
 | 5 | The broker did not return in the configured wait period. |
 | 6 | The restart failed, the endpoint returned an unexpected state, or another caller selected a profile during clearing. |
+
+## Refresh credentials
+
+```sh
+aws-metadata refresh
+aws-metadata refresh --no-open --json
+aws-metadata refresh --wait 600
+```
+
+Normal credential requests renew expired role credentials on demand while the
+underlying browser, identity-provider, or MFA session remains usable. `refresh`
+is the explicit repair path: it calls upstream `/refresh`, then reselects the
+currently active profile without requiring or printing its name.
+
+The default command opens the mode-correct browser interface only when
+reauthentication is required and waits up to 300 seconds. Automation can use
+`--no-open --json`; authentication-required, timeout, and failure results never
+include the selected profile or raw broker response.
+
+| Code | State | Meaning |
+| ---: | --- | --- |
+| 0 | `refreshed` | Upstream returned renewed credentials. |
+| 2 | usage error | An option or wait value is invalid. |
+| 3 | `unavailable` | The metadata endpoint could not be reached. |
+| 4 | `authentication_required` | Interactive authentication is required and was disabled or not awaited. |
+| 5 | `timeout` | The configured interactive authentication wait expired. |
+| 6 | `no_profile` or `error` | No profile is selected, cache clearing failed, or reselection returned an unexpected result. |
+
+Refreshing the broker cannot invalidate credentials already cached inside an
+AWS SDK, CLI process, IDE, or other consumer. Retry or reconnect that consumer
+after refresh according to its own cache behavior.
 
 ## Diagnostics and logs
 

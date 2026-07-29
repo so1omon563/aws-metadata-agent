@@ -21,6 +21,7 @@ readonly VERSION_FILE="${AWS_METADATA_VERSION_FILE:-/usr/local/libexec/aws-metad
 readonly PACKAGE_ROOT="${AWS_METADATA_PACKAGE_ROOT:-}"
 readonly PACKAGE_CLI="${AWS_METADATA_PACKAGE_CLI:-}"
 readonly PROFILE_NAME_PATH=/latest/meta-data/iam/security-credentials/
+readonly REFRESH_PATH=/refresh
 
 usage() {
   cat <<'EOF'
@@ -31,7 +32,7 @@ Usage:
   aws-metadata active-profile
   aws-metadata status [--json]
   aws-metadata open
-  aws-metadata refresh
+  aws-metadata refresh [--open|--no-open] [--wait SECONDS] [--json]
   aws-metadata errors
   aws-metadata logs
   aws-metadata diagnose
@@ -47,6 +48,10 @@ Exit codes for profile:
 Exit codes for clear:
   0 clear  2 usage or unsupported platform  3 unavailable before restart
   5 restart timeout  6 restart failure or unexpected profile state
+
+Exit codes for refresh:
+  0 refreshed  2 usage  3 unavailable  4 authentication required
+  5 authentication timeout  6 no active profile or refresh failure
 EOF
 }
 
@@ -644,6 +649,120 @@ credential_process_command() (
     "$runas" --output json "$profile"
 )
 
+refresh_command() (
+  local json=false
+  local args=("$@")
+  local profile_file body_file status body profile result_status
+
+  while (($#)); do
+    case $1 in
+      --open|--no-open) ;;
+      --json) json=true ;;
+      --wait)
+        shift
+        if (($# == 0)) || [[ ! $1 =~ ^[0-9]+$ ]]; then
+          printf '%s\n' '--wait requires a non-negative integer.' >&2
+          return 2
+        fi
+        ;;
+      *)
+        printf 'Unknown refresh option: %s\n' "$1" >&2
+        return 2
+        ;;
+    esac
+    shift
+  done
+
+  profile_file=$(mktemp "${TMPDIR:-/tmp}/aws-metadata.XXXXXX") || return 6
+  body_file=$(mktemp "${TMPDIR:-/tmp}/aws-metadata.XXXXXX") || {
+    command rm -f "$profile_file"
+    return 6
+  }
+  trap 'rm -f "$profile_file" "$body_file"' EXIT
+
+  status=$(http_request GET /profile '' "$body_file")
+  body=$(<"$body_file")
+  case $status in
+    200) ;;
+    500)
+      if [[ $body == 'profile not set' ]]; then
+        print_result "$json" no_profile \
+          'No AWS metadata profile is selected.'
+        return 6
+      fi
+      print_result "$json" error \
+        "AWS metadata service returned HTTP $status before refresh."
+      return 6
+      ;;
+    000|timeout)
+      print_result "$json" unavailable \
+        "AWS metadata service is unavailable at $BASE_URL."
+      return 3
+      ;;
+    *)
+      print_result "$json" error \
+        "AWS metadata service returned HTTP $status before refresh."
+      return 6
+      ;;
+  esac
+
+  status=$(http_request GET "$PROFILE_NAME_PATH" '' "$profile_file")
+  if [[ $status != 200 ]]; then
+    print_result "$json" error \
+      'Unable to identify the selected AWS metadata profile.'
+    return 6
+  fi
+  profile=$(<"$profile_file")
+  if [[ -z $profile || $profile == *$'\n'* || ${#profile} -gt 256 ]]; then
+    print_result "$json" error \
+      'The selected AWS metadata profile name is invalid.'
+    return 6
+  fi
+
+  status=$(http_request POST "$REFRESH_PATH" '' "$body_file")
+  case $status in
+    200) ;;
+    000|timeout)
+      print_result "$json" unavailable \
+        "AWS metadata service is unavailable at $BASE_URL."
+      return 3
+      ;;
+    *)
+      print_result "$json" error \
+        'Unable to clear the upstream credential cache.'
+      return 6
+      ;;
+  esac
+
+  result_status=0
+  profile_command interactive "$profile" "${args[@]}" >/dev/null ||
+    result_status=$?
+  case $result_status in
+    0)
+      print_result "$json" refreshed 'AWS metadata credentials refreshed.'
+      ;;
+    2) return 2 ;;
+    3)
+      print_result "$json" unavailable \
+        "AWS metadata service is unavailable at $BASE_URL."
+      ;;
+    4)
+      print_result "$json" authentication_required \
+        "Authentication is required in the browser interface at $BASE_URL."
+      ;;
+    5)
+      print_result "$json" timeout \
+        'Timed out waiting for authentication.'
+      ;;
+    *)
+      print_result "$json" error \
+        'Credential refresh failed. Run aws-metadata errors.'
+      result_status=6
+      ;;
+  esac
+  return "$result_status"
+)
+
 restart_broker() {
   case "$(uname -s)" in
     Darwin)
@@ -940,7 +1059,8 @@ main() {
     clear) clear_command "$@" ;;
     active-profile) active_profile_command "$@" ;;
     status) status_command "$@" ;;
-    open|refresh) open_browser ;;
+    open) open_browser ;;
+    refresh) refresh_command "$@" ;;
     errors) errors_command "$@" ;;
     logs) logs_command "$@" ;;
     diagnose|doctor) diagnose_command "$@" ;;
