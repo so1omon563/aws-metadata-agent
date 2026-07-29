@@ -32,7 +32,8 @@ The purpose of the service is to let local applications obtain temporary AWS
 credentials without static credential injection. Any process that can reach
 the installed endpoint may be able to obtain the active profile's credentials:
 `169.254.169.254` in system mode or `127.0.0.1:18080` in macOS user mode.
-Only system mode has validated container-routing paths.
+System mode provides transparent container routing. A Docker Desktop image
+configured for `host.docker.internal:18080` can also reach user mode.
 
 Concrete examples include:
 
@@ -71,7 +72,7 @@ profile again.
 ## Privilege boundary
 
 macOS user mode has no privileged layer. Its LaunchAgent, installer state,
-selected upstream binary, log, and marked AWS compatibility profile are all
+selected upstream binary, log, and marked default AWS process provider are all
 owned by the signed-in developer. The package-managed command is referenced by
 absolute path, and setup refuses to coexist with system mode rather than
 silently changing boundaries after an elevation failure.

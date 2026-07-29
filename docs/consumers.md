@@ -22,6 +22,10 @@ CLI used metadata. AWS CLI command options, environment variables, role and
 web-identity settings, IAM Identity Center, shared credentials,
 `credential_process`, and container credentials all precede IMDS.
 
+In macOS user mode, setup owns the default `credential_process`; in system
+mode, the chain continues to standard IMDS. Neither mode requires a synthetic
+profile for ordinary default-chain commands.
+
 Use the provider-isolated verification in
 [Verification](verification.md#4-metadata-credential-path) when
 proving the integration. It makes an AWS STS request and prints identity
@@ -29,10 +33,10 @@ information; verify the expected role locally and do not publish real output.
 
 ## Profile-oriented consumers
 
-Some integrations require a named AWS profile. System mode uses the optional
-EC2 metadata compatibility profile below. macOS user-mode setup instead owns a
-marked `local-metadata` profile backed by `credential_process`; do not replace
-it with this system-mode stanza.
+Some integrations require a named AWS profile. System mode can use the optional
+EC2 metadata compatibility profile below. macOS user mode instead owns the
+credential provider in `[default]`; select `default` if an application requires
+a profile choice.
 
 ```ini
 [profile local-metadata]
@@ -82,8 +86,8 @@ Check the specific SDK's provider chain and settings:
   install and can hide routing problems; and
 - SDK support for IMDS providers and standalone `credential_source` varies.
 
-In macOS user mode, select the installed `local-metadata` profile. Advanced
-host applications may explicitly inherit
+In macOS user mode, applications use the default profile. Advanced host
+applications may explicitly inherit
 `AWS_CONTAINER_CREDENTIALS_FULL_URI=http://127.0.0.1:18080/credentials` or
 `AWS_EC2_METADATA_SERVICE_ENDPOINT=http://127.0.0.1:18080`, but shared endpoint
 support and GUI environment inheritance vary. See
@@ -100,10 +104,17 @@ and watch for global-profile changes during long-running operations.
 
 ## Containers
 
-Container routing applies only to system mode. Do not inject AWS credential
-environment variables or mount AWS configuration merely to use the validated
-transparent paths. A container cannot reach the host's user-mode service
-through its own `127.0.0.1`.
+System mode provides the transparent container path at `169.254.169.254`.
+A Docker Desktop image can use macOS user mode when the image configures:
+
+```text
+AWS_EC2_METADATA_SERVICE_ENDPOINT=http://host.docker.internal:18080
+```
+
+Put that setting in the maintained image rather than copied launchers. A
+container cannot reach the host service through its own `127.0.0.1`, and
+arbitrary unmodified images do not discover user mode. Do not inject AWS
+credential values or mount AWS configuration for either path.
 
 Docker Desktop on the supported Apple Silicon macOS host and default-bridge
 Docker Engine routing on a GitHub-hosted Ubuntu runner have distinct evidence.

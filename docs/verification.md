@@ -70,6 +70,8 @@ mode. Each command makes one AWS STS identity request.
 
 ```sh
 env \
+  -u AWS_PROFILE \
+  -u AWS_DEFAULT_PROFILE \
   -u AWS_ACCESS_KEY_ID \
   -u AWS_SECRET_ACCESS_KEY \
   -u AWS_SESSION_TOKEN \
@@ -79,7 +81,8 @@ env \
   -u AWS_CONTAINER_CREDENTIALS_FULL_URI \
   -u AWS_CONTAINER_CREDENTIALS_RELATIVE_URI \
   -u AWS_EC2_METADATA_SERVICE_ENDPOINT \
-  aws --profile local-metadata sts get-caller-identity --region us-east-1
+  AWS_SHARED_CREDENTIALS_FILE=/dev/null \
+  aws sts get-caller-identity --region us-east-1
 ```
 
 ### System mode
@@ -115,13 +118,14 @@ public issue or log.
 The core service is verified when steps 1 through 4 pass. Then test only the
 consumer you intend to use:
 
-- User-mode AWS CLI, Terraform AWS provider, and AWS Toolkit users select the
-  installed `local-metadata` process profile.
+- User-mode AWS CLI and Terraform AWS provider users use the default credential
+  chain. Profile-oriented GUIs select `default` when they require a choice.
 - System-mode default-chain AWS CLI and SDK users need no additional profile.
 - Profile-oriented tools such as the AWS Toolkit for Visual Studio Code may
   need the `local-metadata` compatibility profile in
   [Consumer recipes](consumers.md#profile-oriented-consumers).
-- Containers require a runtime-specific reachability check from
+- Containers require either transparent system-mode routing or a user-mode
+  image configured as described in
   [Container runtime validation](container-runtimes.md).
 - Stream Deck automation has a separate
   [verification procedure](stream-deck.md#verify-the-action).

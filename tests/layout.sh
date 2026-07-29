@@ -185,7 +185,7 @@ assert_contains \
   'AWS_METADATA_MODE=%q'
 assert_contains \
   "$PROJECT_DIR/libexec/aws-metadata-config" \
-  '[profile local-metadata]'
+  '[default]'
 assert_contains \
   "$PROJECT_DIR/libexec/aws-metadata-config" \
   '_credential-process'

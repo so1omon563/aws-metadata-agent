@@ -892,7 +892,8 @@ diagnose_command() {
     Darwin)
       if [[ $mode == user ]]; then
         printf '%s\n' 'Link-local address: not used in user mode'
-        printf '%s\n' 'Consumer profile: local-metadata'
+        printf '%s\n' \
+          'Default AWS credential provider: aws-metadata user mode'
       else
         if /sbin/ifconfig lo0 inet 2>/dev/null | grep -Fq '169.254.169.254'; then
           printf '%s\n' 'Link-local address: present on lo0'

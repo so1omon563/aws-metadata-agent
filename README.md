@@ -10,10 +10,11 @@ coding agents, and other local tools can then use `http://169.254.169.254`
 without project-specific wrappers, credential environment variables, mounted
 AWS files, or custom SDK endpoints.
 
-MacOS user mode provides the same friendly global profile-selection workflow
+macOS user mode provides the same friendly global profile-selection workflow
 without administrator access. It uses a host-only loopback broker and a
-standard named `credential_process` profile instead of claiming transparent
-link-local or container routing.
+project-owned `credential_process` in the default AWS profile. Docker Desktop
+images can use that broker when they are configured for its host endpoint;
+arbitrary unmodified containers remain a system-mode capability.
 
 ```text
 Developer selects an aws-runas profile
@@ -51,8 +52,9 @@ not a per-application credential-isolation system.
   affects every host application and container using the endpoint.
 - The active selection is process state. Native services return after logout
   or reboot, but the profile must be selected again after the broker restarts.
-- Any process or container that can reach `169.254.169.254` may be able to
-  obtain credentials for the active profile or request a profile change.
+- Any process or container that can reach the configured metadata endpoint may
+  be able to obtain credentials for the active profile or request a profile
+  change.
 - Authentication remains in the developer account. The privileged layer owns
   installed code and link-local forwarding, not AWS configuration, browser
   state, or credentials.
@@ -69,7 +71,8 @@ endpoint to software you do not fully trust.
 | Logout or reboot service persistence | Validated | Validated | Unverified |
 | Browser-backed SAML/OIDC | Validated | Unverified | Unverified |
 | Standard AWS CLI metadata discovery | Validated | Validated | Unverified |
-| Container routing | Docker Desktop validated | Separate Docker Engine x86_64 CI routing evidence | Runtime-specific and unverified |
+| Transparent system-mode container routing | Docker Desktop validated | Separate Docker Engine x86_64 CI routing evidence | Runtime-specific and unverified |
+| Configured user-mode container images | Docker Desktop endpoint contract; image-specific validation required | Not supported | Unverified |
 | Stream Deck automation | Validated | Not applicable | Unverified |
 
 Supported hosts require Bash 3.2 or newer, `aws-runas` 3.9.0, and `curl`.
@@ -107,9 +110,9 @@ aws-metadata setup --mode user
 
 `brew install` does not use `sudo`, install `aws-runas`, change networking, or
 load services. Explicit user mode stays inside the signed-in account and
-creates the `local-metadata` compatibility profile. Use
+configures the default AWS credential provider. Use
 `aws-metadata setup --mode system` when the transparent
-`169.254.169.254` endpoint and validated container routing are required. See
+`169.254.169.254` endpoint or unmodified container routing is required. See
 [macOS user mode](docs/user-mode.md) and
 [Homebrew installation](docs/homebrew.md) for the exact boundaries.
 

@@ -53,7 +53,7 @@ a browser, or parse credentials.
 
 ```text
 trusted host consumer
-  named local-metadata profile
+  default AWS credential chain
                 |
                 | credential_process
                 v
@@ -63,14 +63,21 @@ trusted host consumer
                 v
  aws-runas ECS-mode broker at 127.0.0.1:18080
   ECS and IMDS credential routes, browser API, ~/.aws caches
+
+configured Docker Desktop image
+                |
+                | IMDS through host.docker.internal:18080
+                +----------------------------------------^
 ```
 
 The user LaunchAgent points at the Homebrew package payload and reads
 user-owned installer state under
 `~/Library/Application Support/aws-metadata-agent`. It does not install a
 system LaunchDaemon, link-local address, socket proxy, or root-owned copy.
-The dedicated `local-metadata` profile uses upstream's process-credential JSON
-for the globally active broker profile.
+The project-owned setting in the default AWS profile uses upstream's
+process-credential JSON for the globally active broker profile. Setup
+preserves unrelated default settings and refuses to replace another default
+credential provider.
 
 ## Installed layout
 

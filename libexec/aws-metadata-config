@@ -5,7 +5,7 @@ set -o pipefail
 
 readonly BEGIN_MARKER='# aws-metadata-agent user mode: begin'
 readonly END_MARKER='# aws-metadata-agent user mode: end'
-readonly PROFILE_HEADER='[profile local-metadata]'
+readonly DEFAULT_HEADER='[default]'
 
 fail() {
   printf 'aws-metadata-config: %s\n' "$1" >&2
@@ -49,10 +49,34 @@ write_block() {
 
   {
     printf '%s\n' "$BEGIN_MARKER"
-    printf '%s\n' "$PROFILE_HEADER"
     printf 'credential_process = "%s" _credential-process\n' "$command_path"
     printf '%s\n' "$END_MARKER"
   } >"$output"
+}
+
+insert_block() {
+  local input=$1
+  local block=$2
+  local output=$3
+
+  command awk -v block="$block" '
+    {
+      print
+      if (!inserted &&
+          $0 ~ /^[[:space:]]*\[default\][[:space:]]*$/) {
+        while ((getline line < block) > 0) {
+          print line
+        }
+        close(block)
+        inserted = 1
+      }
+    }
+    END {
+      if (!inserted) {
+        exit 2
+      }
+    }
+  ' "$input" >"$output" || fail 'unable to update the default AWS profile'
 }
 
 remove_block() {
@@ -94,35 +118,106 @@ extract_block() {
   ' "$input" >"$output"
 }
 
+default_section_count() {
+  local input=$1
+
+  grep -Ec '^[[:space:]]*\[default\][[:space:]]*$' "$input" 2>/dev/null ||
+    true
+}
+
+default_has_credential_settings() {
+  local input=$1
+
+  command awk '
+    /^[[:space:]]*\[/ {
+      in_default = ($0 ~ /^[[:space:]]*\[default\][[:space:]]*$/)
+      next
+    }
+    in_default {
+      line = $0
+      sub(/^[[:space:]]*/, "", line)
+      if (line ~ /^[#;]/ || line !~ /=/) {
+        next
+      }
+      key = line
+      sub(/[[:space:]]*=.*/, "", key)
+      key = tolower(key)
+      gsub(/[[:space:]]/, "", key)
+      if (key ~ /^(aws_access_key_id|aws_secret_access_key|aws_session_token|credential_process|credential_source|source_profile|role_arn|web_identity_token_file|sso_.*|login_session)$/) {
+        found = 1
+        exit
+      }
+    }
+    END { exit(found ? 0 : 1) }
+  ' "$input"
+}
+
+default_credentials_has_settings() {
+  local input=$1
+
+  command awk '
+    /^[[:space:]]*\[/ {
+      in_default = ($0 ~ /^[[:space:]]*\[default\][[:space:]]*$/)
+      next
+    }
+    in_default {
+      line = $0
+      sub(/^[[:space:]]*/, "", line)
+      if (line !~ /^[#;]/ && line ~ /=/) {
+        found = 1
+        exit
+      }
+    }
+    END { exit(found ? 0 : 1) }
+  ' "$input"
+}
+
 validate_add_target() {
   block_state=missing
+  default_state=missing
+  base_path=''
   [[ -e $config_path ]] || return 0
 
   begin_count=$(marker_count "$BEGIN_MARKER" "$config_path")
   end_count=$(marker_count "$END_MARKER" "$config_path")
   if [[ $begin_count -eq 0 && $end_count -eq 0 ]]; then
-    if grep -Eq '^[[:space:]]*\[(profile[[:space:]]+)?local-metadata\][[:space:]]*$' \
-      "$config_path"; then
-      fail 'AWS profile local-metadata already exists and is not project-owned'
-    fi
     block_state=plain
-    return 0
-  fi
-  if [[ $begin_count -ne 1 || $end_count -ne 1 ]]; then
-    fail 'AWS config has incomplete or duplicate project ownership markers'
+    base_path=$config_path
+  else
+    if [[ $begin_count -ne 1 || $end_count -ne 1 ]]; then
+      fail 'AWS config has incomplete or duplicate project ownership markers'
+    fi
+    remove_block "$config_path" "$base_file"
+    block_state=owned
+    base_path=$base_file
   fi
 
-  remove_block "$config_path" "$new_file"
-  block_state=owned
+  default_count=$(default_section_count "$base_path")
+  if [[ $default_count -gt 1 ]]; then
+    fail 'AWS config has duplicate default profiles'
+  fi
+  if [[ $default_count -eq 1 ]]; then
+    default_state=present
+    if default_has_credential_settings "$base_path"; then
+      fail 'AWS default profile already has a credential provider'
+    fi
+  fi
 }
 
 command_name=${1:-}
 config_path=${2:-}
 command_path=${3:-}
+credentials_path=''
 
 if [[ $command_name != validate && $command_name != add &&
       $command_name != remove ]]; then
-  fail 'usage: aws-metadata-config validate CONFIG | add CONFIG COMMAND | remove CONFIG' 2
+  fail 'usage: aws-metadata-config validate CONFIG [CREDENTIALS] | add CONFIG COMMAND [CREDENTIALS] | remove CONFIG' 2
+fi
+if [[ $command_name == validate ]]; then
+  credentials_path=$command_path
+  command_path=''
+elif [[ $command_name == add ]]; then
+  credentials_path=${4:-}
 fi
 if [[ $config_path != /* || $config_path == *$'\n'* ]]; then
   fail 'CONFIG must be an absolute path' 2
@@ -133,10 +228,29 @@ fi
 if [[ -e $config_path && ! -f $config_path ]]; then
   fail "AWS config is not a regular file: $config_path"
 fi
+if [[ -e $config_path && ! -r $config_path ]]; then
+  fail "AWS config is not readable: $config_path"
+fi
+if [[ -n $credentials_path ]]; then
+  if [[ $credentials_path != /* || $credentials_path == *$'\n'* ]]; then
+    fail 'CREDENTIALS must be an absolute path' 2
+  fi
+  if [[ -e $credentials_path && ! -f $credentials_path ]]; then
+    fail "AWS credentials are not a regular file: $credentials_path"
+  fi
+  if [[ -e $credentials_path && ! -r $credentials_path ]]; then
+    fail "AWS credentials are not readable: $credentials_path"
+  fi
+  if [[ -e $credentials_path ]] &&
+     default_credentials_has_settings "$credentials_path"; then
+    fail 'AWS credentials file already configures the default profile'
+  fi
+fi
 
 temp_dir=$(mktemp -d "${TMPDIR:-/tmp}/aws-metadata-config.XXXXXX")
 trap 'rm -rf "$temp_dir"' EXIT
 new_file=$temp_dir/new
+base_file=$temp_dir/base
 block_file=$temp_dir/block
 backup_file=$temp_dir/backup
 
@@ -153,22 +267,24 @@ if [[ $command_name == validate || $command_name == add ]]; then
   fi
 
   write_block "$block_file" "$command_path"
-  if [[ $block_state == missing ]]; then
-    command cp "$block_file" "$new_file"
-  elif [[ $block_state == plain ]]; then
-    command cp "$config_path" "$new_file"
-    if [[ -s $new_file ]]; then
-      printf '\n' >>"$new_file"
-    fi
-    command cat "$block_file" >>"$new_file"
-  else
+  if [[ $block_state == owned ]]; then
     extract_block "$config_path" "$temp_dir/current-block"
     if command cmp -s "$temp_dir/current-block" "$block_file"; then
       exit 0
     fi
+  fi
+
+  if [[ $default_state == present ]]; then
+    insert_block "$base_path" "$block_file" "$new_file"
+  elif [[ -n $base_path && -s $base_path ]]; then
+    command cp "$base_path" "$new_file"
     if [[ -s $new_file ]]; then
       printf '\n' >>"$new_file"
     fi
+    printf '%s\n' "$DEFAULT_HEADER" >>"$new_file"
+    command cat "$block_file" >>"$new_file"
+  else
+    printf '%s\n' "$DEFAULT_HEADER" >"$new_file"
     command cat "$block_file" >>"$new_file"
   fi
 

@@ -41,8 +41,10 @@ aws-metadata setup --mode user
 
 If `aws-runas` is absent from `PATH` and `~/.local/bin`, setup downloads the
 pinned upstream release and verifies its published checksum. User mode creates
-only a user LaunchAgent and a marked `local-metadata` compatibility profile.
-It does not request administrator access.
+only a user LaunchAgent and a marked default `credential_process`. It does not
+request administrator access. Setup preserves harmless default settings such
+as region and output, but refuses to replace existing default credentials,
+SSO, roles, or another process provider.
 
 Use [macOS user mode](user-mode.md) for its consumer and container boundaries.
 Choose `aws-metadata setup --mode system` only when the transparent link-local
@@ -153,9 +155,9 @@ Complete the [verification checklist](verification.md). It proves, in order:
 4. provider-isolated AWS credentials through metadata; and
 5. any optional application or container boundary you actually need.
 
-When those checks pass, the happy path is complete. User-mode applications
-select `local-metadata`; system-mode applications using the default AWS
-credential chain need no project-specific wrapper or endpoint.
+When those checks pass, the happy path is complete. Host applications that
+honor the default AWS credential chain use either mode without a
+project-specific wrapper or per-role consumer profile.
 
 When work with the active identity is complete, return the broker to healthy
 no-profile state:

@@ -124,7 +124,7 @@ launchctl_bootstrap_with_retry() {
 
 install_user_mode() {
   local state_dir config_file marker_file runas_file
-  local agent_dir agent_file log_dir log_file aws_dir aws_config
+  local agent_dir agent_file log_dir log_file aws_dir aws_config aws_credentials
   local metadata_ready=false
 
   if [[ $(uname -s) != Darwin ]]; then
@@ -156,8 +156,10 @@ install_user_mode() {
   log_file=$log_dir/aws-metadata-agent.log
   aws_dir=$target_home/.aws
   aws_config=$aws_dir/config
+  aws_credentials=$aws_dir/credentials
 
-  "$PROJECT_DIR/libexec/aws-metadata-config" validate "$aws_config"
+  "$PROJECT_DIR/libexec/aws-metadata-config" \
+    validate "$aws_config" "$aws_credentials"
 
   umask 077
   mkdir -p "$state_dir" "$aws_dir"
@@ -208,12 +210,12 @@ install_user_mode() {
   fi
 
   "$PROJECT_DIR/libexec/aws-metadata-config" \
-    add "$aws_config" "$package_cli"
+    add "$aws_config" "$package_cli" "$aws_credentials"
 
   printf 'aws-metadata-agent user mode installed for %s.\n' "$target_user"
   printf 'Version: %s\n' "$agent_version"
   printf '%s\n' 'No administrator access or system networking was used.'
-  printf '%s\n' 'Consumer profile: local-metadata'
+  printf '%s\n' 'Default AWS credential provider: aws-metadata user mode'
   printf '%s\n' 'Run: aws-metadata status'
   printf '%s\n' 'Open: http://127.0.0.1:18080'
 }

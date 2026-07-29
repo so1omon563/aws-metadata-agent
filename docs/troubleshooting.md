@@ -174,8 +174,9 @@ Use the isolated identity test in
 
 ## CLI works but a GUI application fails
 
-- Configure the GUI with the optional `local-metadata` consumer profile if it
-  requires a selectable name.
+- In user mode, select `default` if the GUI requires a profile choice. In
+  system mode, use the optional `local-metadata` compatibility profile when
+  the integration cannot use its default chain.
 - Confirm the application has not disabled IMDS.
 - Restart the GUI after changing AWS configuration if it caches profiles.
 - For automation, use the absolute package-managed `aws-metadata` path rather
@@ -191,9 +192,11 @@ mode. Link-local routing may be forwarded to the host, intercepted by a cloud
 metadata proxy, or dropped. The installer does not modify Docker, Podman,
 Kubernetes, CNI, or VM networking.
 
-See [Container runtime validation](container-runtimes.md) before adding a
-custom route or endpoint override; those workarounds can diagnose a problem but
-do not prove transparent EC2 metadata compatibility.
+For macOS user mode, confirm the maintained image configures
+`AWS_EC2_METADATA_SERVICE_ENDPOINT=http://host.docker.internal:18080`.
+That is a configured-image contract, not transparent EC2 metadata
+compatibility. For system mode, follow the standard-address reachability check.
+See [Container runtime validation](container-runtimes.md).
 
 ## Profile changes unexpectedly
 

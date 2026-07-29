@@ -15,8 +15,8 @@ usage() {
 Usage: ./uninstall.sh [--mode system|user] [--package-cli PATH]
 
 System mode removes privileged service state. User mode removes only the
-current user's LaunchAgent, user-mode state, and project-owned compatibility
-profile. Upstream aws-runas caches are kept.
+current user's LaunchAgent, user-mode state, and project-owned default
+credential provider. Upstream aws-runas caches are kept.
 EOF
 }
 
