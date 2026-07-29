@@ -97,6 +97,48 @@ validated marketing `ProductVersion` is recorded in the
 [project README](../README.md#supported-platforms). Other macOS versions and
 architectures are not part of the current support claim.
 
+## Switch service modes
+
+Keep the Homebrew package installed and remove the current mode before setting
+up the other one. To switch from user mode to system mode:
+
+```sh
+aws-metadata uninstall --mode user
+aws-metadata setup --mode system
+aws-metadata status
+aws-metadata diagnose
+```
+
+System-mode setup requests administrator access. To switch from system mode to
+user mode:
+
+Before removing system mode, confirm that `[default]` contains no static
+credentials, SSO or role settings, or another `credential_process`, and that
+`[default]` in `~/.aws/credentials` is empty. User-mode setup refuses to replace
+those credential sources. Move or rename them before starting the transition;
+see [macOS user mode](user-mode.md#connect-applications) for the full
+preflight contract.
+
+```sh
+aws-metadata uninstall --mode system
+aws-metadata setup --mode user
+aws-metadata status
+aws-metadata diagnose
+```
+
+Removing system mode also requires administrator access because it must remove
+root-owned launchd and link-local networking state. If device policy blocks
+that command, do not remove files manually or try to bypass the policy; ask an
+administrator to run the matching system-mode uninstaller. User-mode setup is
+unprivileged after system mode has been removed.
+
+Switching modes restarts the broker and clears its active profile. Reselect the
+upstream profile after setup. Unrelated AWS configuration, named profiles, and
+`aws-runas` caches are preserved. The endpoint and container boundary also
+change, so review [Consumers](consumers.md) and
+[Container runtimes](container-runtimes.md) before switching workflows that
+depend on transparent `169.254.169.254` access.
+
 ## Browser-based authentication permission
 
 The upstream `saml_provider = browser` flow starts and manages a dedicated
