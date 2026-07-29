@@ -116,10 +116,49 @@ if [[ $active_profile_output != personal ]]; then
   exit 1
 fi
 
+USER_MODE_HOME=$TEMP_ROOT/user-mode-home
+USER_MODE_STATE="$USER_MODE_HOME/Library/Application Support/aws-metadata-agent"
+USER_MODE_RUNAS=$TEMP_ROOT/aws-runas
+USER_MODE_RUNAS_LOG=$TEMP_ROOT/aws-runas-call
+mkdir -p "$USER_MODE_STATE"
+printf '%s\n' user >"$USER_MODE_STATE/user-mode"
+printf '%s\n' "$USER_MODE_RUNAS" >"$USER_MODE_STATE/aws-runas-path"
+cat >"$USER_MODE_RUNAS" <<'EOF'
+#!/usr/bin/env bash
+set -eu
+printf '%s|%s|%s\n' "$*" "${AWS_PROFILE-unset}" "${AWS_CONFIG_FILE-unset}" \
+  >"${MOCK_RUNAS_LOG:?}"
+printf '%s\n' \
+  '{"Version":1,"AccessKeyId":"SYNTHETIC","SecretAccessKey":"SYNTHETIC","SessionToken":"SYNTHETIC","Expiration":"2099-01-01T00:00:00Z"}'
+EOF
+chmod +x "$USER_MODE_RUNAS"
+process_output=$(env \
+  HOME="$USER_MODE_HOME" \
+  AWS_PROFILE=unexpected \
+  AWS_CONFIG_FILE=/unexpected/config \
+  MOCK_RUNAS_LOG="$USER_MODE_RUNAS_LOG" \
+  MOCK_CURL_STATUS=200 \
+  MOCK_CURL_PROFILE_NAME=personal \
+  "$CLI" _credential-process)
+if [[ $process_output != *'"Version":1'* ]]; then
+  printf 'Unexpected credential-process output: %s\n' "$process_output" >&2
+  exit 1
+fi
+if [[ $(<"$USER_MODE_RUNAS_LOG") != '--output json personal|unset|unset' ]]; then
+  printf 'Unexpected aws-runas invocation: %s\n' \
+    "$(<"$USER_MODE_RUNAS_LOG")" >&2
+  exit 1
+fi
+assert_exit 1 env \
+  HOME="$USER_MODE_HOME" \
+  MOCK_CURL_STATUS=500 \
+  MOCK_CURL_BODY='profile not set' \
+  "$CLI" _credential-process
+
 : >"$CURL_CALL_LOG"
 MOCK_CURL_STATUS=200 MOCK_CURL_PROFILE_NAME=personal \
   MOCK_CURL_CALL_LOG="$CURL_CALL_LOG" "$CLI" active-profile >/dev/null
-assert_curl_calls 1
+assert_curl_calls 2
 assert_request_timeout 0.2 env MOCK_CURL_STATUS=200 \
   MOCK_CURL_PROFILE_NAME=personal "$CLI" active-profile
 AWS_METADATA_ACTIVE_PROFILE_TIMEOUT_SECONDS=0.05 \
@@ -474,8 +513,27 @@ if [[ $setup_help != *'--no-install-cli'* ]]; then
   exit 1
 fi
 uninstall_help=$(AWS_METADATA_PACKAGE_ROOT="$PROJECT_DIR" "$CLI" uninstall --help)
-if [[ $uninstall_help != *'Stops and removes aws-metadata-agent services'* ]]; then
+if [[ $uninstall_help != *'System mode removes privileged service state.'* ]]; then
   printf '%s\n' 'Packaged uninstall help did not reach the uninstaller.' >&2
+  exit 1
+fi
+mode_error=''
+mode_status=0
+mode_error=$(AWS_METADATA_PACKAGE_ROOT="$PROJECT_DIR" \
+  AWS_METADATA_PACKAGE_CLI=/bin/true \
+  "$CLI" setup --aws-runas /bin/true 2>&1) || mode_status=$?
+if [[ $mode_status -ne 2 ||
+      $mode_error != *'Choose an explicit setup mode'* ]]; then
+  printf 'Unexpected missing-mode setup result: %s\n' "$mode_error" >&2
+  exit 1
+fi
+mode_status=0
+mode_error=$(AWS_METADATA_PACKAGE_ROOT="$PROJECT_DIR" \
+  AWS_METADATA_PACKAGE_CLI=/bin/true \
+  "$CLI" uninstall 2>&1) || mode_status=$?
+if [[ $mode_status -ne 2 ||
+      $mode_error != *'Choose the installed mode'* ]]; then
+  printf 'Unexpected missing-mode uninstall result: %s\n' "$mode_error" >&2
   exit 1
 fi
 assert_exit 2 env AWS_METADATA_PACKAGE_ROOT= "$CLI" setup --help

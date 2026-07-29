@@ -3,12 +3,17 @@
 `aws-metadata-agent` makes a developer workstation behave like an EC2 instance
 from the perspective of AWS credential discovery.
 
-It exposes temporary credentials from a user-owned
+In transparent system mode it exposes temporary credentials from a user-owned
 [`aws-runas`](https://mmmorris1975.github.io/aws-runas/) profile through the
 standard EC2 instance metadata endpoint. AWS CLI, SDKs, VS Code, containers,
 coding agents, and other local tools can then use `http://169.254.169.254`
 without project-specific wrappers, credential environment variables, mounted
 AWS files, or custom SDK endpoints.
+
+MacOS user mode provides the same friendly global profile-selection workflow
+without administrator access. It uses a host-only loopback broker and a
+standard named `credential_process` profile instead of claiming transparent
+link-local or container routing.
 
 ```text
 Developer selects an aws-runas profile
@@ -59,15 +64,17 @@ endpoint to software you do not fully trust.
 
 | Capability | Apple Silicon macOS 26 | Ubuntu 24.04 ARM64 | Other hosts |
 | --- | --- | --- | --- |
-| Native install and uninstall | Validated | Validated | Unverified |
+| System-mode install and uninstall | Validated | Validated | Unverified |
+| Sudo-free user-mode install and uninstall | Implemented; managed-host validation pending | Not supported | Unverified |
 | Logout or reboot service persistence | Validated | Validated | Unverified |
 | Browser-backed SAML/OIDC | Validated | Unverified | Unverified |
 | Standard AWS CLI metadata discovery | Validated | Validated | Unverified |
 | Container routing | Docker Desktop validated | Separate Docker Engine x86_64 CI routing evidence | Runtime-specific and unverified |
 | Stream Deck automation | Validated | Not applicable | Unverified |
 
-Supported hosts require Bash 3.2 or newer, `aws-runas` 3.9.0, `curl`, and
-administrator access during native service setup. Ubuntu additionally
+Supported hosts require Bash 3.2 or newer, `aws-runas` 3.9.0, and `curl`.
+System mode requires administrator access during native service setup; macOS
+user mode does not. Ubuntu additionally
 requires systemd with a working user manager, `ip`, `systemctl`, `loginctl`,
 `sudo`, and `systemd-socket-proxyd`. `unzip` is required only when bootstrapping
 `aws-runas`.
@@ -95,14 +102,16 @@ package, and run the separate service setup:
 brew trust --tap so1omon563/aws-metadata-agent
 brew tap so1omon563/aws-metadata-agent
 brew install aws-metadata-agent
-aws-metadata setup
+aws-metadata setup --mode user
 ```
 
 `brew install` does not use `sudo`, install `aws-runas`, change networking, or
-load services. `aws-metadata setup` conditionally bootstraps `aws-runas` and
-then requests administrator access for native service installation. See
-[Homebrew installation](docs/homebrew.md) for the exact setup, trust, browser
-permission, recovery, and uninstall behavior.
+load services. Explicit user mode stays inside the signed-in account and
+creates the `local-metadata` compatibility profile. Use
+`aws-metadata setup --mode system` when the transparent
+`169.254.169.254` endpoint and validated container routing are required. See
+[macOS user mode](docs/user-mode.md) and
+[Homebrew installation](docs/homebrew.md) for the exact boundaries.
 
 For supported Ubuntu ARM64, follow the checksum-verified, inspect-first
 [direct release installation](docs/direct-install.md). Direct installation

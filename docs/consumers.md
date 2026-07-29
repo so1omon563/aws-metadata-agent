@@ -29,9 +29,10 @@ information; verify the expected role locally and do not publish real output.
 
 ## Profile-oriented consumers
 
-Some integrations require a named AWS profile even when the desired credential
-source is metadata. The AWS Toolkit for Visual Studio Code is a validated
-example. Add an optional consumer compatibility profile to `~/.aws/config`:
+Some integrations require a named AWS profile. System mode uses the optional
+EC2 metadata compatibility profile below. macOS user-mode setup instead owns a
+marked `local-metadata` profile backed by `credential_process`; do not replace
+it with this system-mode stanza.
 
 ```ini
 [profile local-metadata]
@@ -65,8 +66,8 @@ for the full portability boundary and official AWS references.
 
 ## Generic SDKs and tools
 
-Applications that use an AWS SDK's default credential provider chain should
-use the standard endpoint with no project-specific configuration:
+In system mode, applications that use an AWS SDK's default credential provider
+chain should use the standard endpoint with no project-specific configuration:
 
 ```text
 http://169.254.169.254
@@ -81,6 +82,13 @@ Check the specific SDK's provider chain and settings:
   install and can hide routing problems; and
 - SDK support for IMDS providers and standalone `credential_source` varies.
 
+In macOS user mode, select the installed `local-metadata` profile. Advanced
+host applications may explicitly inherit
+`AWS_CONTAINER_CREDENTIALS_FULL_URI=http://127.0.0.1:18080/credentials` or
+`AWS_EC2_METADATA_SERVICE_ENDPOINT=http://127.0.0.1:18080`, but shared endpoint
+support and GUI environment inheritance vary. See
+[macOS user mode](user-mode.md).
+
 AWS documents the shared model in
 [standardized credential providers](https://docs.aws.amazon.com/sdkref/latest/guide/standardized-credentials.html),
 but the SDK- or tool-specific guide remains authoritative.
@@ -92,9 +100,10 @@ and watch for global-profile changes during long-running operations.
 
 ## Containers
 
-Do not inject AWS credential environment variables or mount AWS configuration
-merely to use this project. A validated runtime reaches the same standard
-address as a host process.
+Container routing applies only to system mode. Do not inject AWS credential
+environment variables or mount AWS configuration merely to use the validated
+transparent paths. A container cannot reach the host's user-mode service
+through its own `127.0.0.1`.
 
 Docker Desktop on the supported Apple Silicon macOS host and default-bridge
 Docker Engine routing on a GitHub-hosted Ubuntu runner have distinct evidence.

@@ -14,9 +14,10 @@ aws-metadata status
 aws-metadata diagnose
 ```
 
-The service should be running at `http://169.254.169.254`. A new or restarted
-broker may report no selected profile; that is healthy. If the command is
-missing or the endpoint is unavailable, start with
+The service should be running at `http://127.0.0.1:18080` in macOS user mode
+or `http://169.254.169.254` in system mode. A new or restarted broker may
+report no selected profile; that is healthy. If the command is missing or the
+endpoint is unavailable, start with
 [Troubleshooting](troubleshooting.md#choose-the-failing-symptom).
 
 ## 2. Upstream profile
@@ -62,9 +63,28 @@ aws-metadata use example-nonprod --wait 600
 
 ## 4. Metadata credential path
 
-AWS tools stop at the first valid provider. This command removes the common
-competing providers, leaves IMDS enabled, and makes one AWS STS identity
-request:
+AWS tools stop at the first valid provider. Use the check for the installed
+mode. Each command makes one AWS STS identity request.
+
+### macOS user mode
+
+```sh
+env \
+  -u AWS_ACCESS_KEY_ID \
+  -u AWS_SECRET_ACCESS_KEY \
+  -u AWS_SESSION_TOKEN \
+  -u AWS_SECURITY_TOKEN \
+  -u AWS_ROLE_ARN \
+  -u AWS_WEB_IDENTITY_TOKEN_FILE \
+  -u AWS_CONTAINER_CREDENTIALS_FULL_URI \
+  -u AWS_CONTAINER_CREDENTIALS_RELATIVE_URI \
+  -u AWS_EC2_METADATA_SERVICE_ENDPOINT \
+  aws --profile local-metadata sts get-caller-identity --region us-east-1
+```
+
+### System mode
+
+This version removes the common competing providers and leaves IMDS enabled:
 
 ```sh
 env \
@@ -95,7 +115,9 @@ public issue or log.
 The core service is verified when steps 1 through 4 pass. Then test only the
 consumer you intend to use:
 
-- Default-chain AWS CLI and SDK users need no additional profile.
+- User-mode AWS CLI, Terraform AWS provider, and AWS Toolkit users select the
+  installed `local-metadata` process profile.
+- System-mode default-chain AWS CLI and SDK users need no additional profile.
 - Profile-oriented tools such as the AWS Toolkit for Visual Studio Code may
   need the `local-metadata` compatibility profile in
   [Consumer recipes](consumers.md#profile-oriented-consumers).

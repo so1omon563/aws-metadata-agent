@@ -7,8 +7,13 @@
   <string>com.github.so1omon563.aws-metadata-agent.broker</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/local/libexec/aws-metadata-agent/aws-metadata-server</string>
+    <string>__SERVER_PATH__</string>
   </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>AWS_METADATA_CONFIG</key>
+    <string>__CONFIG_PATH__</string>
+  </dict>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>

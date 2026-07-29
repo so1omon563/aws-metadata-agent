@@ -67,7 +67,8 @@ first:
 
 ```sh
 # Homebrew package
-aws-metadata setup
+aws-metadata setup --mode user
+# or rerun the originally selected --mode system
 
 # Extracted direct/source release
 ./install.sh
@@ -75,17 +76,18 @@ aws-metadata setup
 
 Reinstalling the same release is supported and replaces service payloads and
 definitions before reloading them. If rerunning fails and clean removal is
-required, use `aws-metadata uninstall` for Homebrew or `./uninstall.sh` from
-the matching release, then confirm with `aws-metadata diagnose` or host service
-tools. Do not start by manually deleting individual units or root-owned files;
-that can hide the original boundary and leave partial state.
+required, use the matching `aws-metadata uninstall --mode user` or
+`--mode system` for Homebrew, or `./uninstall.sh` from the matching release.
+Then confirm with `aws-metadata diagnose` or host service tools. Do not start
+by manually deleting individual units or root-owned files; that can hide the
+original boundary and leave partial state.
 
 ## Running with no active profile
 
 Immediately after first setup, broker restart, or reboot:
 
 ```text
-AWS metadata service is running at http://169.254.169.254.
+AWS metadata service is running at the endpoint for the installed mode.
 No profile is selected.
 ```
 

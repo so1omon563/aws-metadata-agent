@@ -5,6 +5,13 @@ All notable changes to this project are documented here. Changes remain under
 
 ## [Unreleased]
 
+### Added
+
+- A macOS `--mode user` setup and uninstall path runs one ECS-mode
+  `aws-runas` broker on loopback without `sudo`, installs a reversible
+  `local-metadata` process profile for host applications, and keeps the
+  existing transparent system mode explicit and separate.
+
 ## [0.3.4] - 2026-07-22
 
 ### Fixed

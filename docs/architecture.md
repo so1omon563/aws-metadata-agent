@@ -6,7 +6,8 @@ in the developer account.
 
 ## Goals
 
-- Preserve the standard `169.254.169.254:80` EC2 metadata address.
+- Preserve the standard `169.254.169.254:80` EC2 metadata address in system
+  mode and provide an explicit loopback-only macOS user mode.
 - Keep `aws-runas`, browser authentication, and AWS caches unprivileged.
 - Restrict root to installed code, a link-local address, and TCP forwarding.
 - Keep AWS profile definitions and credentials outside project-owned state.
@@ -14,6 +15,8 @@ in the developer account.
 - Expose one active profile honestly rather than claim per-consumer isolation.
 
 ## Process topology and ownership
+
+### System mode
 
 ```text
 trusted local consumer
@@ -46,6 +49,29 @@ The privileged layer knows only the external link-local address and internal
 loopback port. It does not receive an AWS profile, read a home directory, open
 a browser, or parse credentials.
 
+### macOS user mode
+
+```text
+trusted host consumer
+  named local-metadata profile
+                |
+                | credential_process
+                v
+ package-managed aws-metadata command
+                |
+                | active profile name
+                v
+ aws-runas ECS-mode broker at 127.0.0.1:18080
+  ECS and IMDS credential routes, browser API, ~/.aws caches
+```
+
+The user LaunchAgent points at the Homebrew package payload and reads
+user-owned installer state under
+`~/Library/Application Support/aws-metadata-agent`. It does not install a
+system LaunchDaemon, link-local address, socket proxy, or root-owned copy.
+The dedicated `local-metadata` profile uses upstream's process-credential JSON
+for the globally active broker profile.
+
 ## Installed layout
 
 Common root-owned state:
@@ -72,9 +98,12 @@ the installer.
 
 | Domain | Definition | Role |
 | --- | --- | --- |
-| Developer GUI | `~/Library/LaunchAgents/com.github.so1omon563.aws-metadata-agent.broker.plist` | Keeps the broker running as the installing user. |
+| Developer GUI | `~/Library/LaunchAgents/com.github.so1omon563.aws-metadata-agent.broker.plist` | Keeps the broker running as the installing user in either explicit mode. |
 | System | `/Library/LaunchDaemons/com.github.so1omon563.aws-metadata-agent.forwarder.plist` | Creates the loopback alias and loads the socket proxy. |
 | System | `/Library/Application Support/aws-metadata-agent/com.github.so1omon563.aws-metadata-agent.proxy.plist` | Lets launchd own port 80 and runs `/usr/bin/nc` as `nobody` per accepted connection. |
+
+The system rows exist only in system mode. The shared broker label makes the
+two modes mutually exclusive for one login user.
 
 ### Linux services
 

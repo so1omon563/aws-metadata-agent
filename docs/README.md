@@ -17,6 +17,8 @@ exact contract.
 
 - [Homebrew installation](homebrew.md) — install and set up the supported
   macOS package.
+- [macOS user mode](user-mode.md) — run the broker without administrator
+  access on a managed Mac.
 - [Direct release installation](direct-install.md) — inspect and install a
   verified release on supported Ubuntu ARM64 or macOS.
 - [Configure aws-runas](aws-runas-configuration.md) — define upstream IAM,

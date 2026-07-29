@@ -28,7 +28,10 @@ assert_not_contains() {
 
 assert_contains \
   "$PROJECT_DIR/launchd/com.github.so1omon563.aws-metadata-agent.broker.plist" \
-  "$SERVICE_DIR/aws-metadata-server"
+  '__SERVER_PATH__'
+assert_contains \
+  "$PROJECT_DIR/launchd/com.github.so1omon563.aws-metadata-agent.broker.plist" \
+  '__CONFIG_PATH__'
 assert_contains \
   "$PROJECT_DIR/launchd/com.github.so1omon563.aws-metadata-agent.forwarder.plist" \
   "$SERVICE_DIR/aws-metadata-forwarder"
@@ -82,7 +85,10 @@ assert_contains \
 # shellcheck disable=SC2016
 assert_contains \
   "$PROJECT_DIR/libexec/aws-metadata-server" \
-  'serve ec2 --port "${AWS_METADATA_PORT:-18080}"'
+  'args=(-r serve "$service_type" --port "${AWS_METADATA_PORT:-18080}")'
+assert_contains \
+  "$PROJECT_DIR/libexec/aws-metadata-server" \
+  'user) service_type=ecs'
 assert_not_contains "$PROJECT_DIR/install.sh" '--profile'
 assert_not_contains "$PROJECT_DIR/install.sh" 'AWS_METADATA_PROFILE'
 # shellcheck disable=SC2016
@@ -170,7 +176,19 @@ assert_contains \
 # shellcheck disable=SC2016
 assert_contains \
   "$PROJECT_DIR/install.sh" \
-  'log_path_replacement=$(sed_replacement_escape "$log_path_xml")'
+  'render_broker_plist'
+assert_contains \
+  "$PROJECT_DIR/install.sh" \
+  'install_user_mode'
+assert_contains \
+  "$PROJECT_DIR/install.sh" \
+  'AWS_METADATA_MODE=%q'
+assert_contains \
+  "$PROJECT_DIR/libexec/aws-metadata-config" \
+  '[profile local-metadata]'
+assert_contains \
+  "$PROJECT_DIR/libexec/aws-metadata-config" \
+  '_credential-process'
 # The assertion intentionally searches for a literal awk field expression.
 # shellcheck disable=SC2016
 assert_not_contains \

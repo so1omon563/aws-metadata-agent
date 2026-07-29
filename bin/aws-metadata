@@ -3,7 +3,14 @@
 set -u
 set -o pipefail
 
-readonly BASE_URL="${AWS_METADATA_URL:-http://169.254.169.254}"
+default_base_url=http://169.254.169.254
+readonly USER_STATE_DIR="${HOME:-}/Library/Application Support/aws-metadata-agent"
+readonly USER_MODE_MARKER=$USER_STATE_DIR/user-mode
+readonly USER_RUNAS_PATH=$USER_STATE_DIR/aws-runas-path
+if [[ -z ${AWS_METADATA_URL+x} && -r $USER_MODE_MARKER ]]; then
+  default_base_url=http://127.0.0.1:18080
+fi
+readonly BASE_URL="${AWS_METADATA_URL:-$default_base_url}"
 readonly DEFAULT_WAIT="${AWS_METADATA_WAIT_SECONDS:-0}"
 readonly DEFAULT_CLEAR_WAIT="${AWS_METADATA_CLEAR_WAIT_SECONDS:-15}"
 readonly DEFAULT_ACTIVE_PROFILE_TIMEOUT=0.2
@@ -85,6 +92,16 @@ has_aws_runas_argument() {
   return 1
 }
 
+has_mode_argument() {
+  while (($#)); do
+    if [[ $1 == --mode ]]; then
+      return 0
+    fi
+    shift
+  done
+  return 1
+}
+
 validate_package_cli() {
   if [[ $PACKAGE_CLI != /* || ! -x $PACKAGE_CLI ]]; then
     printf '%s\n' \
@@ -99,6 +116,11 @@ setup_command() {
   installer=$(package_script install.sh) || return
   if [[ ${1:-} == -h || ${1:-} == --help ]]; then
     exec "$installer" "$@"
+  fi
+  if ! has_mode_argument "$@"; then
+    printf '%s\n' \
+      'Choose an explicit setup mode: --mode user or --mode system.' >&2
+    return 2
   fi
   validate_package_cli || return
 
@@ -120,6 +142,11 @@ uninstall_command() {
   uninstaller=$(package_script uninstall.sh) || return
   if [[ ${1:-} == -h || ${1:-} == --help ]]; then
     exec "$uninstaller" "$@"
+  fi
+  if ! has_mode_argument "$@"; then
+    printf '%s\n' \
+      'Choose the installed mode: --mode user or --mode system.' >&2
+    return 2
   fi
   validate_package_cli || return
   exec "$uninstaller" --package-cli "$PACKAGE_CLI" "$@"
@@ -554,6 +581,11 @@ active_profile_command() (
   profile_name_file=$(mktemp "${TMPDIR:-/tmp}/aws-metadata.XXXXXX" 2>/dev/null) ||
     return 0
   trap 'rm -f "$profile_name_file"' EXIT
+  status=$(http_request GET /profile '' "$profile_name_file" \
+    "$request_timeout" 2>/dev/null)
+  if [[ $status != 200 ]]; then
+    return 0
+  fi
   status=$(http_request GET "$PROFILE_NAME_PATH" '' "$profile_name_file" \
     "$request_timeout" 2>/dev/null)
 
@@ -563,6 +595,53 @@ active_profile_command() (
       printf '%s\n' "$profile_name"
     fi
   fi
+)
+
+credential_process_command() (
+  local profile_file status profile runas
+
+  if (($#)); then
+    printf 'Unknown credential-process option: %s\n' "$1" >&2
+    return 2
+  fi
+  if [[ ! -r $USER_MODE_MARKER || ! -r $USER_RUNAS_PATH ]]; then
+    printf '%s\n' 'aws-metadata user mode is not configured.' >&2
+    return 1
+  fi
+
+  runas=$(<"$USER_RUNAS_PATH")
+  if [[ $runas != /* || ! -x $runas ]]; then
+    printf '%s\n' 'The configured aws-runas command is unavailable.' >&2
+    return 1
+  fi
+
+  profile_file=$(mktemp "${TMPDIR:-/tmp}/aws-metadata.XXXXXX") || return 1
+  trap 'rm -f "$profile_file"' EXIT
+  status=$(http_request GET /profile '' "$profile_file")
+  if [[ $status != 200 ]]; then
+    printf '%s\n' 'No active aws-metadata profile is available.' >&2
+    return 1
+  fi
+  status=$(http_request GET "$PROFILE_NAME_PATH" '' "$profile_file")
+  if [[ $status != 200 ]]; then
+    printf '%s\n' 'No active aws-metadata profile is available.' >&2
+    return 1
+  fi
+  profile=$(<"$profile_file")
+  if [[ -z $profile || $profile == *$'\n'* || ${#profile} -gt 256 ]]; then
+    printf '%s\n' 'The active aws-metadata profile name is invalid.' >&2
+    return 1
+  fi
+
+  exec env \
+    -u AWS_PROFILE \
+    -u AWS_DEFAULT_PROFILE \
+    -u AWS_CONFIG_FILE \
+    -u AWS_SHARED_CREDENTIALS_FILE \
+    -u AWS_CONTAINER_CREDENTIALS_FULL_URI \
+    -u AWS_CONTAINER_CREDENTIALS_RELATIVE_URI \
+    -u AWS_EC2_METADATA_SERVICE_ENDPOINT \
+    "$runas" --output json "$profile"
 )
 
 restart_broker() {
@@ -779,15 +858,24 @@ errors_command() {
 }
 
 diagnose_command() {
-  local status=0
+  local status=0 mode=system runas=''
 
   printf 'Platform: %s\n' "$(uname -s)"
+  if [[ -r $USER_MODE_MARKER ]]; then
+    mode=user
+  fi
+  printf 'Mode: %s\n' "$mode"
   printf 'Configured endpoint: %s\n' "$BASE_URL"
-  if command -v aws-runas >/dev/null 2>&1; then
-    printf 'aws-runas: %s\n' "$(command -v aws-runas)"
-    aws-runas --version 2>&1 | sed 's/^/  /'
+  if [[ $mode == user && -r $USER_RUNAS_PATH ]]; then
+    runas=$(<"$USER_RUNAS_PATH")
   else
-    printf '%s\n' 'aws-runas: not found in PATH'
+    runas=$(command -v aws-runas || true)
+  fi
+  if [[ -n $runas && -x $runas ]]; then
+    printf 'aws-runas: %s\n' "$runas"
+    "$runas" --version 2>&1 | sed 's/^/  /'
+  else
+    printf '%s\n' 'aws-runas: configured executable not found'
     status=1
   fi
 
@@ -802,11 +890,16 @@ diagnose_command() {
 
   case $(uname -s) in
     Darwin)
-      if /sbin/ifconfig lo0 inet 2>/dev/null | grep -Fq '169.254.169.254'; then
-        printf '%s\n' 'Link-local address: present on lo0'
+      if [[ $mode == user ]]; then
+        printf '%s\n' 'Link-local address: not used in user mode'
+        printf '%s\n' 'Consumer profile: local-metadata'
       else
-        printf '%s\n' 'Link-local address: missing from lo0'
-        status=1
+        if /sbin/ifconfig lo0 inet 2>/dev/null | grep -Fq '169.254.169.254'; then
+          printf '%s\n' 'Link-local address: present on lo0'
+        else
+          printf '%s\n' 'Link-local address: missing from lo0'
+          status=1
+        fi
       fi
       if launchctl print \
         "gui/$(id -u)/com.github.so1omon563.aws-metadata-agent.broker" \
@@ -850,6 +943,7 @@ main() {
     errors) errors_command "$@" ;;
     logs) logs_command "$@" ;;
     diagnose|doctor) diagnose_command "$@" ;;
+    _credential-process) credential_process_command "$@" ;;
     version|--version) version_command "$@" ;;
     setup) setup_command "$@" ;;
     uninstall) uninstall_command "$@" ;;

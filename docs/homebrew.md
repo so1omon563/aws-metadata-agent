@@ -2,8 +2,8 @@
 
 Homebrew is the primary installation path for supported macOS hosts. The
 formula installs a versioned, unprivileged project payload. Service setup is a
-separate explicit command because it needs administrator access to configure
-the link-local address and launchd services.
+separate explicit command. User mode remains unprivileged; system mode requests
+administrator access to configure the link-local address and launchd services.
 
 ## Review and trust the tap
 
@@ -42,30 +42,39 @@ brew trust --help
 Do not replace repository review with a blind tap/install command merely to
 work around an older client.
 
-## Set up the native service
+## Choose and set up a service mode
 
 `brew install` places the package under the Homebrew prefix. Trust, tap, and
 install do not invoke `sudo`, change network state, install `aws-runas`, or
-load services. Complete the separate setup explicitly:
+load services. Complete one explicit setup:
 
 ```sh
-aws-metadata setup
+# Managed Mac or host-only consumers:
+aws-metadata setup --mode user
+
+# Transparent IMDS and validated container routing:
+aws-metadata setup --mode system
 ```
 
-Before requesting administrator access, setup looks for `aws-runas` in `PATH`
-and `~/.local/bin`. If it is absent and no `--aws-runas PATH` is supplied,
+Both modes look for `aws-runas` in `PATH` and `~/.local/bin`. If it is absent
+and no `--aws-runas PATH` is supplied,
 setup invokes the packaged checksum-verified bootstrap. The bootstrap downloads
 the pinned, unmodified binary directly from the official upstream release into
 `~/.local/bin`; the formula does not bundle or mirror it. If an executable is
 already available, setup skips the download.
 
-Setup then runs the same reviewed installer used by source releases. The
-installer requests `sudo` for the root-owned service payload, link-local
-address, and launchd services; the credential broker continues to run as the
-installing user. To use a specific existing binary and skip discovery:
+User mode installs a user LaunchAgent, listens on `127.0.0.1:18080`, and adds a
+marked `local-metadata` process profile without `sudo`. System mode requests
+`sudo` for the root-owned service payload, link-local address, and system
+launchd services; its credential broker still runs as the installing user.
+The modes refuse to coexist and setup never silently changes modes after a
+blocked elevation attempt. See [macOS user mode](user-mode.md) for its
+host-only consumer boundary.
+
+To use a specific existing binary and skip discovery:
 
 ```sh
-aws-metadata setup --aws-runas /absolute/path/to/aws-runas
+aws-metadata setup --mode user --aws-runas /absolute/path/to/aws-runas
 ```
 
 Setup should finish by reporting the installing user, agent version,
@@ -114,32 +123,32 @@ for the operating-system description of App Management.
 
 ## Recover from partial setup
 
-If package installation succeeded but setup stopped after requesting
-administrator access, retain the exact error and rerun the known operation:
+If setup stopped, retain the exact error and rerun the same explicit mode:
 
 ```sh
-aws-metadata setup
+aws-metadata setup --mode user
+# or: aws-metadata setup --mode system
 aws-metadata diagnose
 ```
 
-Rerunning setup is supported and refreshes root-owned payloads and service
-definitions. If clean removal is necessary, use `aws-metadata uninstall` while
-the formula remains installed, then rerun setup. Avoid manually deleting
-individual launchd definitions or the link-local alias before the matching
-uninstaller can restore known state.
+Rerunning setup is supported. If clean removal is necessary, use the matching
+`aws-metadata uninstall --mode user` or `--mode system` while the formula
+remains installed, then rerun setup. Avoid manually deleting individual
+launchd definitions or link-local state before the matching uninstaller can
+restore known state.
 
 See [Troubleshooting](troubleshooting.md) for endpoint, broker, browser, and
 credential-provider boundaries.
 
 ## Upgrade
 
-Upgrade the Homebrew payload, then explicitly refresh the root-owned service
-copy and definitions:
+Upgrade the Homebrew payload, then explicitly refresh the selected mode:
 
 ```sh
 brew update
 brew upgrade aws-metadata-agent
-aws-metadata setup
+aws-metadata setup --mode user
+# or: aws-metadata setup --mode system
 aws-metadata version
 aws-metadata status
 aws-metadata diagnose
@@ -151,17 +160,18 @@ the package manager.
 
 ## Uninstall and revoke trust
 
-Remove privileged service state before the Homebrew payload:
+Remove the selected service mode before the Homebrew payload:
 
 ```sh
-aws-metadata uninstall
+aws-metadata uninstall --mode user
+# or: aws-metadata uninstall --mode system
 brew uninstall aws-metadata-agent
 ```
 
 If Homebrew was removed first, reinstall the formula and run
-`aws-metadata uninstall`, or use `uninstall.sh` from the matching tagged source
-release. User-owned AWS configuration, profiles, and `aws-runas` caches are
-preserved.
+the matching uninstall command, or use `uninstall.sh` from the matching tagged
+source release. User mode removes only its marked `local-metadata` block.
+Other AWS configuration, profiles, and `aws-runas` caches are preserved.
 
 When the formula and tap are no longer needed, remove the tap and its trust
 entry explicitly:
@@ -172,8 +182,8 @@ brew untap so1omon563/aws-metadata-agent
 ```
 
 Untrusting does not uninstall a formula or remove a tap. Untapping does not
-remove privileged agent service state, which is why `aws-metadata uninstall`
-comes first.
+remove agent service state, which is why the matching explicit
+`aws-metadata uninstall --mode ...` comes first.
 
 ## Rollback
 
@@ -184,8 +194,9 @@ the exact earlier tag through its verified direct/source path. That temporarily
 changes installation ownership away from Homebrew.
 
 To return to the current formula, run the older release's `./uninstall.sh`,
-then reinstall the formula and run `aws-metadata setup`. Do not keep
-source-owned and package-managed commands as competing installations. See
+then reinstall the formula and run `aws-metadata setup --mode user` or
+`--mode system`. Do not keep source-owned and package-managed commands as
+competing installations. See
 [Upgrades and rollback](upgrades.md#rollback) for the full transition.
 
 The maintainer-only formula wrapper, environment, and CI contract is in

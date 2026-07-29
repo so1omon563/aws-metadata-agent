@@ -10,6 +10,11 @@ boundaries.
 `aws-metadata-agent` makes EC2 instance metadata the canonical credential
 interface on a developer workstation.
 
+Transparent system mode exposes that interface at `169.254.169.254`. macOS
+user mode preserves the same one-active-profile model on loopback and installs
+a named `local-metadata` process profile for host applications; it does not
+claim transparent container routing.
+
 ```text
 Developer
     |

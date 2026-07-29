@@ -17,6 +17,7 @@ source "$CONFIG_FILE"
 : "${AWS_METADATA_UID:?Missing AWS_METADATA_UID}"
 : "${AWS_METADATA_HOME:?Missing AWS_METADATA_HOME}"
 : "${AWS_RUNAS:?Missing AWS_RUNAS}"
+AWS_METADATA_MODE=${AWS_METADATA_MODE:-system}
 
 if [[ $(id -u) != "$AWS_METADATA_UID" ]]; then
   printf 'Refusing to run credential broker as uid %s; expected uid %s.\n' \
@@ -28,6 +29,15 @@ export HOME=$AWS_METADATA_HOME
 export USER=$AWS_METADATA_USER
 export LOGNAME=$AWS_METADATA_USER
 
-args=(-r serve ec2 --port "${AWS_METADATA_PORT:-18080}")
+case $AWS_METADATA_MODE in
+  system) service_type=ec2 ;;
+  user) service_type=ecs ;;
+  *)
+    printf 'Unsupported AWS_METADATA_MODE: %s.\n' "$AWS_METADATA_MODE" >&2
+    exit 1
+    ;;
+esac
+
+args=(-r serve "$service_type" --port "${AWS_METADATA_PORT:-18080}")
 
 exec "$AWS_RUNAS" "${args[@]}"
