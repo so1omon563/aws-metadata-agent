@@ -73,6 +73,16 @@ if grep -Fq 'aws-metadata-agent user mode' "$config_target"; then
   fail 'owned AWS config block remained after cleanup'
 fi
 
+created_default=$TEMP_ROOT/aws/created-default
+printf '%s\n' '# existing comment' >"$created_default"
+"$CONFIG_HELPER" add "$created_default" "$command_path"
+printf '%s\n' 'region = us-west-2' >>"$created_default"
+"$CONFIG_HELPER" remove "$created_default"
+grep -Fqx '[default]' "$created_default" ||
+  fail 'cleanup removed a default profile with user settings'
+grep -Fqx 'region = us-west-2' "$created_default" ||
+  fail 'cleanup removed a user-added default setting'
+
 conflict=$TEMP_ROOT/aws/conflict
 printf '%s\n' \
   '[default]' \
@@ -219,9 +229,8 @@ EOF
   [[ ! -e $agent_file ]] || fail 'user-mode LaunchAgent remained after uninstall'
   grep -Fqx '# keep this line' "$MOCK_HOME/.aws/config" ||
     fail 'uninstall removed unrelated AWS config'
-  if grep -Fqx '[default]' "$MOCK_HOME/.aws/config"; then
-    fail 'uninstall left a project-created default profile'
-  fi
+  grep -Fqx '[default]' "$MOCK_HOME/.aws/config" ||
+    fail 'uninstall removed the default profile header'
   if grep -Fq 'aws-metadata-agent user mode' "$MOCK_HOME/.aws/config"; then
     fail 'uninstall left the owned AWS config block'
   fi

@@ -46,13 +46,9 @@ replace_contents() {
 write_block() {
   local output=$1
   local command_path=$2
-  local include_header=$3
 
   {
     printf '%s\n' "$BEGIN_MARKER"
-    if [[ $include_header == true ]]; then
-      printf '%s\n' "$DEFAULT_HEADER"
-    fi
     printf 'credential_process = "%s" _credential-process\n' "$command_path"
     printf '%s\n' "$END_MARKER"
   } >"$output"
@@ -270,11 +266,7 @@ if [[ $command_name == validate || $command_name == add ]]; then
     fail 'COMMAND must be an executable absolute path' 2
   fi
 
-  if [[ $default_state == present ]]; then
-    write_block "$block_file" "$command_path" false
-  else
-    write_block "$block_file" "$command_path" true
-  fi
+  write_block "$block_file" "$command_path"
   if [[ $block_state == owned ]]; then
     extract_block "$config_path" "$temp_dir/current-block"
     if command cmp -s "$temp_dir/current-block" "$block_file"; then
@@ -289,9 +281,11 @@ if [[ $command_name == validate || $command_name == add ]]; then
     if [[ -s $new_file ]]; then
       printf '\n' >>"$new_file"
     fi
+    printf '%s\n' "$DEFAULT_HEADER" >>"$new_file"
     command cat "$block_file" >>"$new_file"
   else
-    command cp "$block_file" "$new_file"
+    printf '%s\n' "$DEFAULT_HEADER" >"$new_file"
+    command cat "$block_file" >>"$new_file"
   fi
 
   replace_contents "$config_path" "$new_file" "$backup_file"
