@@ -112,6 +112,13 @@ aws-metadata diagnose
 System-mode setup requests administrator access. To switch from system mode to
 user mode:
 
+Before removing system mode, confirm that `[default]` contains no static
+credentials, SSO or role settings, or another `credential_process`, and that
+`[default]` in `~/.aws/credentials` is empty. User-mode setup refuses to replace
+those credential sources. Move or rename them before starting the transition;
+see [macOS user mode](user-mode.md#connect-applications) for the full
+preflight contract.
+
 ```sh
 aws-metadata uninstall --mode system
 aws-metadata setup --mode user
