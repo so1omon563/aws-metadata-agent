@@ -131,14 +131,18 @@ aws-metadata active-profile
 aws-metadata clear
 ```
 
-After a Homebrew upgrade, refresh the versioned LaunchAgent target explicitly:
+Routine Homebrew upgrades follow the stable `opt` path and do not require
+setup:
 
 ```sh
 brew upgrade aws-metadata-agent
-aws-metadata setup --mode user
+aws-metadata version
+aws-metadata status
 ```
 
-Repeated setup is supported. To remove only user mode:
+If user mode was configured by an older formula that used versioned Cellar
+paths, run `aws-metadata setup --mode user` once after upgrading. Repeated
+setup remains supported for migration or repair. To remove only user mode:
 
 ```sh
 aws-metadata uninstall --mode user
