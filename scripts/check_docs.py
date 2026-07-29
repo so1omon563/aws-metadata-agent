@@ -176,6 +176,20 @@ def validate_reader_contract(root: Path) -> None:
             "docs/troubleshooting.md omits the Linux system proxy service status"
         )
 
+    consumers = (root / "docs/consumers.md").read_text(encoding="utf-8")
+    for required in (
+        "| macOS user mode | `default` | Project-owned `credential_process` |",
+        "| System mode | `local-metadata` | EC2 instance metadata |",
+        "Do not select `example-nonprod` in the Toolkit",
+        "**AWS: Sign Out**",
+        "**AWS: Switch Connection**",
+        "merely reselecting the connection does not invalidate",
+    ):
+        if required not in consumers:
+            raise DocsError(
+                f"docs/consumers.md omits AWS Toolkit mode contract: {required}"
+            )
+
 
 def main() -> int:
     root = Path.cwd().resolve()

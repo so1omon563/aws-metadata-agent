@@ -119,11 +119,12 @@ The core service is verified when steps 1 through 4 pass. Then test only the
 consumer you intend to use:
 
 - User-mode AWS CLI and Terraform AWS provider users use the default credential
-  chain. Profile-oriented GUIs select `default` when they require a choice.
+  chain. In the AWS Toolkit for Visual Studio Code, select `default`.
 - System-mode default-chain AWS CLI and SDK users need no additional profile.
-- Profile-oriented tools such as the AWS Toolkit for Visual Studio Code may
-  need the `local-metadata` compatibility profile in
-  [Consumer recipes](consumers.md#profile-oriented-consumers).
+  In the AWS Toolkit, select the `local-metadata` compatibility profile.
+- Use the
+  [mode-specific AWS Toolkit procedure](consumers.md#profile-oriented-consumers)
+  to validate both the initial connection and a later global profile change.
 - Containers require either transparent system-mode routing or a configured
   user-mode image. `so1omon/tf_image:v1.0.2` and later perform the supported
   Docker Desktop discovery automatically; see

@@ -33,10 +33,23 @@ information; verify the expected role locally and do not publish real output.
 
 ## Profile-oriented consumers
 
-Some integrations require a named AWS profile. System mode can use the optional
-EC2 metadata compatibility profile below. macOS user mode instead owns the
-credential provider in `[default]`; select `default` if an application requires
-a profile choice.
+Some integrations require a named AWS profile. The AWS Toolkit for Visual
+Studio Code is one example. Select the consumer profile for the installed mode:
+
+| Agent mode | Select in the AWS Toolkit | Credential provider |
+| --- | --- | --- |
+| macOS user mode | `default` | Project-owned `credential_process` |
+| System mode | `local-metadata` | EC2 instance metadata |
+
+User-mode setup creates the marked provider in `[default]`; do not add another
+profile for the Toolkit:
+
+```ini
+[default]
+credential_process = "/absolute/package/path/aws-metadata" _credential-process
+```
+
+System mode instead uses this optional compatibility profile:
 
 ```ini
 [profile local-metadata]
@@ -44,20 +57,24 @@ region = us-west-2
 credential_source = Ec2InstanceMetadata
 ```
 
-Then select the real upstream role globally and choose the compatibility
-profile in the consumer:
+In both modes, select the real upstream role through the agent first:
 
 ```sh
 aws-metadata use example-nonprod
-aws --profile local-metadata sts get-caller-identity
 ```
 
-In the AWS Toolkit, select `local-metadata`. The names have different jobs:
+Then choose `default` or `local-metadata` from the AWS Toolkit connection
+picker according to the table. Do not select `example-nonprod` in the Toolkit
+merely because it is active; that is the upstream profile passed to the agent,
+not the consumer connection.
+
+The names have different jobs:
 
 - `example-nonprod` is an upstream `aws-runas` profile and the value passed to
   `aws-metadata use`;
+- `default` asks the user-mode process provider for whichever profile is active;
 - `local-metadata` asks the consumer to retrieve whichever credentials are
-  currently exposed by EC2 metadata.
+  currently exposed by system-mode EC2 metadata.
 
 `local-metadata` is not one-to-one with a role and must not add a `role_arn`
 merely to appear complete. Adding one would ask the consumer to assume another
@@ -67,6 +84,26 @@ for an integration known to support it.
 
 See [Configure aws-runas](aws-runas-configuration.md#named-metadata-profile-for-profile-oriented-tools)
 for the full portability boundary and official AWS references.
+
+### Validate an AWS Toolkit connection
+
+1. Record the installed VS Code and AWS Toolkit versions.
+2. Run `aws-metadata use example-nonprod`.
+3. Choose `default` in user mode or `local-metadata` in system mode.
+4. Open an AWS Toolkit view that makes a permitted AWS request and confirm the
+   expected account and role locally.
+5. Select a different non-production upstream profile.
+6. Run **AWS: Sign Out**, then **AWS: Switch Connection** and select `default`
+   again in user mode or `local-metadata` again in system mode.
+7. Confirm the Toolkit now uses the second identity while its selected
+   consumer profile remains `default` or `local-metadata`.
+
+The Toolkit caches credentials until they expire. In either mode, an Explorer
+refresh or merely reselecting the connection does not invalidate that cache;
+signing out does. If that action is unavailable, run
+**Developer: Reload Window** before reconnecting. Do not publish account IDs,
+role names, real profile names, Toolkit logs, or authentication output from
+this check.
 
 ## Generic SDKs and tools
 

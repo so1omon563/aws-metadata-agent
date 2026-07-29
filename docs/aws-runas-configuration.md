@@ -210,10 +210,17 @@ aws --profile local-metadata sts get-caller-identity
 ```
 
 Select `local-metadata` in the AWS Toolkit for Visual Studio Code for the same
-reason. The consumer profile does not select or lock an upstream profile, and
-it does not correspond one-to-one with an AWS role. If another caller changes
-the active agent profile, the consumer receives credentials for the new active
-profile.
+reason. In macOS user mode, select `default` instead; user-mode setup owns its
+process provider. The
+[side-by-side Toolkit procedure](consumers.md#profile-oriented-consumers)
+keeps those mode-specific choices separate. The consumer profile does not
+select or lock an upstream profile, and it does not correspond one-to-one with
+an AWS role. If another caller changes the active agent profile, the consumer
+receives credentials for the new active profile on its next credential
+refresh. The Toolkit retains valid connection credentials in either mode; to
+apply an immediate change, run **AWS: Sign Out**, then
+**AWS: Switch Connection** and select `default` or `local-metadata` again. An
+Explorer refresh alone does not invalidate that cache.
 
 No custom endpoint is required because `aws-metadata-agent` exposes the
 standard `169.254.169.254` address. Applications that already use the default
