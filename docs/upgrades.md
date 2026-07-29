@@ -41,21 +41,32 @@ credential source; system mode does not edit AWS configuration.
 
 ## Homebrew upgrade
 
-Homebrew owns the package command; service setup owns the selected launchd
-definition and any system-mode payload. Upgrade both layers explicitly:
+Homebrew owns the package command. User mode references Homebrew's stable
+`opt` path, so routine formula upgrades keep its LaunchAgent and default
+`credential_process` valid:
 
 ```sh
 brew update
 brew upgrade aws-metadata-agent
-aws-metadata setup --mode user
-# or: aws-metadata setup --mode system
 aws-metadata version
 aws-metadata status
 aws-metadata diagnose
 ```
 
-Rerunning the same explicit setup mode refreshes its service payload from the
-package. Reinstalling the same version is supported.
+If user mode was set up by a formula that used versioned Cellar paths, run
+`aws-metadata setup --mode user` once after upgrading to migrate both
+integrations to the stable path. Later routine user-mode upgrades do not
+require setup.
+
+System mode copies a root-owned payload outside Homebrew, so refresh that layer
+after every package upgrade:
+
+```sh
+aws-metadata setup --mode system
+```
+
+Rerunning either explicit setup mode remains supported for repair or
+reinstallation.
 
 ## Direct release upgrade
 

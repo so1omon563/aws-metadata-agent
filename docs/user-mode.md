@@ -46,8 +46,12 @@ Setup adds one marked, project-owned setting to the default profile in
 
 ```ini
 [default]
-credential_process = "/absolute/package/path/aws-metadata" _credential-process
+credential_process = "/opt/homebrew/opt/aws-metadata-agent/bin/aws-metadata" _credential-process
 ```
+
+Homebrew's `opt` symlink follows the active formula version, so this provider
+and the user LaunchAgent remain valid when an old versioned Cellar keg is
+removed during upgrade.
 
 The internal command asks the local broker for the active profile name, then
 uses the pinned upstream `aws-runas` process-credential output for that
@@ -127,14 +131,18 @@ aws-metadata active-profile
 aws-metadata clear
 ```
 
-After a Homebrew upgrade, refresh the versioned LaunchAgent target explicitly:
+Routine Homebrew upgrades follow the stable `opt` path and do not require
+setup:
 
 ```sh
 brew upgrade aws-metadata-agent
-aws-metadata setup --mode user
+aws-metadata version
+aws-metadata status
 ```
 
-Repeated setup is supported. To remove only user mode:
+If user mode was configured by an older formula that used versioned Cellar
+paths, run `aws-metadata setup --mode user` once after upgrading. Repeated
+setup remains supported for migration or repair. To remove only user mode:
 
 ```sh
 aws-metadata uninstall --mode user

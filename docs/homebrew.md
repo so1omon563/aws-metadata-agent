@@ -185,21 +185,25 @@ credential-provider boundaries.
 
 ## Upgrade
 
-Upgrade the Homebrew payload, then explicitly refresh the selected mode:
+Upgrade the Homebrew payload:
 
 ```sh
 brew update
 brew upgrade aws-metadata-agent
-aws-metadata setup --mode user
-# or: aws-metadata setup --mode system
 aws-metadata version
 aws-metadata status
 aws-metadata diagnose
 ```
 
-Setup normally restarts the broker, so reselect the active profile. Homebrew
-owns the command in its prefix; setup records that command removal belongs to
-the package manager.
+Routine user-mode upgrades keep the LaunchAgent and default
+`credential_process` valid through Homebrew's stable `opt` path and do not
+require setup. If user mode was configured by an older formula that used
+versioned Cellar paths, run `aws-metadata setup --mode user` once after
+upgrading; that migration restarts the broker, so reselect the active profile.
+
+System mode copies a root-owned payload outside Homebrew. Run
+`aws-metadata setup --mode system` after each package upgrade to refresh it.
+Homebrew continues to own command removal in both modes.
 
 ## Uninstall and revoke trust
 

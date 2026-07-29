@@ -46,7 +46,7 @@ profile for the Toolkit:
 
 ```ini
 [default]
-credential_process = "/absolute/package/path/aws-metadata" _credential-process
+credential_process = "/opt/homebrew/opt/aws-metadata-agent/bin/aws-metadata" _credential-process
 ```
 
 System mode instead uses this optional compatibility profile:
