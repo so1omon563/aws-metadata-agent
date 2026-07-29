@@ -46,8 +46,12 @@ Setup adds one marked, project-owned setting to the default profile in
 
 ```ini
 [default]
-credential_process = "/absolute/package/path/aws-metadata" _credential-process
+credential_process = "/opt/homebrew/opt/aws-metadata-agent/bin/aws-metadata" _credential-process
 ```
+
+Homebrew's `opt` symlink follows the active formula version, so this provider
+and the user LaunchAgent remain valid when an old versioned Cellar keg is
+removed during upgrade.
 
 The internal command asks the local broker for the active profile name, then
 uses the pinned upstream `aws-runas` process-credential output for that

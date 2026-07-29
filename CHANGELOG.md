@@ -5,6 +5,12 @@ All notable changes to this project are documented here. Changes remain under
 
 ## [Unreleased]
 
+### Fixed
+
+- Homebrew now gives user-mode setup stable `opt` paths for its LaunchAgent and
+  default `credential_process`, so routine formula upgrades no longer leave
+  those integrations pointing at a removed versioned Cellar keg.
+
 ## [0.4.1] - 2026-07-29
 
 ### Added
