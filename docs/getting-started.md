@@ -126,6 +126,15 @@ No profile is a healthy startup state. In system mode the endpoint is
 after setup bootstrapped `~/.local/bin/aws-runas`, configure the shell path as
 described above; the configured broker can still be running correctly.
 
+Open the upstream browser interface for the installed mode with:
+
+```sh
+aws-metadata open
+```
+
+The direct user-mode URL is `http://127.0.0.1:18080/`; system mode uses
+`http://169.254.169.254/`.
+
 ## 4. Select the profile
 
 Use the human-oriented command:

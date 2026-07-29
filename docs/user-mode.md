@@ -102,6 +102,20 @@ when the user-mode service is unavailable. Arbitrary unmodified images continue
 to use `169.254.169.254`; use system mode when transparent container routing is
 required.
 
+## Open the browser interface
+
+User mode provides the same upstream browser interface as system mode. Open the
+endpoint for the installed mode with:
+
+```sh
+aws-metadata open
+```
+
+The direct user-mode URL is `http://127.0.0.1:18080/`. It lets the signed-in
+user select the active upstream profile and complete browser or MFA
+authentication. The loopback address is reachable only from the macOS host;
+system mode instead exposes the interface at `http://169.254.169.254/`.
+
 ## Lifecycle and ownership
 
 Profile selection, status, browser access, refresh, clear, logs, and errors use

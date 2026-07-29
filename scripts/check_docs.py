@@ -135,11 +135,22 @@ def validate_reader_contract(root: Path) -> None:
     for required in (
         "install -> confirm upstream profile -> check service -> select profile -> verify",
         "[verification checklist](verification.md)",
+        "aws-metadata open",
+        "`http://127.0.0.1:18080/`",
     ):
         if required not in getting_started:
             raise DocsError(
                 f"docs/getting-started.md is missing happy-path contract: {required}"
             )
+
+    user_mode = (root / "docs/user-mode.md").read_text(encoding="utf-8")
+    for required in (
+        "## Open the browser interface",
+        "aws-metadata open",
+        "`http://127.0.0.1:18080/`",
+    ):
+        if required not in user_mode:
+            raise DocsError(f"docs/user-mode.md omits browser UI contract: {required}")
 
     user_files = (
         "README.md",
