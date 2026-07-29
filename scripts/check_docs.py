@@ -186,6 +186,27 @@ def validate_reader_contract(root: Path) -> None:
         raise DocsError(
             "docs/troubleshooting.md omits the Linux system proxy service status"
         )
+    for required in (
+        "## Selected profile needs credential renewal",
+        "aws-metadata refresh --no-open --json",
+        "credential cache may still hold",
+    ):
+        if required not in troubleshooting:
+            raise DocsError(
+                f"docs/troubleshooting.md omits credential renewal contract: {required}"
+            )
+
+    cli_reference = (root / "docs/cli-reference.md").read_text(encoding="utf-8")
+    for required in (
+        "## Refresh credentials",
+        "calls upstream `/refresh`",
+        "without requiring or printing its name",
+        "| 4 | `authentication_required` |",
+    ):
+        if required not in cli_reference:
+            raise DocsError(
+                f"docs/cli-reference.md omits refresh contract: {required}"
+            )
 
     consumers = (root / "docs/consumers.md").read_text(encoding="utf-8")
     for required in (

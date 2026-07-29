@@ -16,6 +16,7 @@ readonly TEMP_ROOT
 trap 'rm -rf "$TEMP_ROOT"' EXIT
 readonly CURL_MAX_TIME_LOG="$TEMP_ROOT/curl-max-time"
 readonly CURL_CALL_LOG="$TEMP_ROOT/curl-calls"
+readonly CURL_URL_LOG="$TEMP_ROOT/curl-urls"
 readonly CURL_RESPONSE_QUEUE="$TEMP_ROOT/curl-responses"
 readonly CLEAR_STDERR="$TEMP_ROOT/clear-stderr"
 readonly TRANSIENT_SAML_STS_TIMEOUT='failed to refresh cached credentials, operation error STS: AssumeRoleWithSAML, https response error StatusCode: 408, RequestID: , api error UnknownError: UnknownError'
@@ -127,7 +128,7 @@ cat >"$USER_MODE_RUNAS" <<'EOF'
 #!/usr/bin/env bash
 set -eu
 printf '%s|%s|%s\n' "$*" "${AWS_PROFILE-unset}" "${AWS_CONFIG_FILE-unset}" \
-  >"${MOCK_RUNAS_LOG:?}"
+  >>"${MOCK_RUNAS_LOG:?}"
 printf '%s\n' \
   '{"Version":1,"AccessKeyId":"SYNTHETIC","SecretAccessKey":"SYNTHETIC","SessionToken":"SYNTHETIC","Expiration":"2099-01-01T00:00:00Z"}'
 EOF
@@ -147,6 +148,15 @@ fi
 if [[ $(<"$USER_MODE_RUNAS_LOG") != '--output json personal|unset|unset' ]]; then
   printf 'Unexpected aws-runas invocation: %s\n' \
     "$(<"$USER_MODE_RUNAS_LOG")" >&2
+  exit 1
+fi
+HOME="$USER_MODE_HOME" \
+  MOCK_RUNAS_LOG="$USER_MODE_RUNAS_LOG" \
+  MOCK_CURL_STATUS=200 \
+  MOCK_CURL_PROFILE_NAME=personal \
+  "$CLI" _credential-process >/dev/null
+if [[ $(wc -l <"$USER_MODE_RUNAS_LOG" | tr -d ' ') != 2 ]]; then
+  printf '%s\n' 'credential_process cached an aws-runas result between calls.' >&2
   exit 1
 fi
 assert_exit 1 env \
@@ -214,6 +224,79 @@ MOCK_CURL_STATUS=401 assert_exit 4 "$CLI" use test-profile --no-open
 MOCK_CURL_STATUS=401 assert_exit 4 "$CLI" profile test-profile --no-open
 MOCK_CURL_STATUS=500 assert_exit 6 "$CLI" profile test-profile --no-open
 MOCK_CURL_STATUS=000 assert_exit 3 "$CLI" profile test-profile --no-open
+
+# Refresh uses the upstream browser sequence without printing the active profile.
+: >"$CURL_URL_LOG"
+printf '200|{"role_arn":"sensitive-role"}\n200|\n200|success\n200|\n' \
+  >"$CURL_RESPONSE_QUEUE"
+refresh_output=$(MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
+  MOCK_CURL_PROFILE_NAME=sensitive-profile \
+  MOCK_CURL_URL_LOG="$CURL_URL_LOG" "$CLI" refresh --no-open)
+if [[ $refresh_output != 'AWS metadata credentials refreshed.' ]] ||
+   [[ $refresh_output == *'sensitive-profile'* ]] ||
+   [[ $(<"$CURL_URL_LOG") != \
+  $'GET http://127.0.0.1:9876/profile\nGET http://127.0.0.1:9876/latest/meta-data/iam/security-credentials/\nPOST http://127.0.0.1:9876/refresh\nPOST http://127.0.0.1:9876/profile' ]]; then
+  printf 'Unexpected refresh sequence: %s\n' "$refresh_output" >&2
+  cat "$CURL_URL_LOG" >&2
+  exit 1
+fi
+
+# The same refresh sequence targets the transparent system-mode endpoint.
+SYSTEM_MODE_HOME=$TEMP_ROOT/system-mode-home
+mkdir -p "$SYSTEM_MODE_HOME"
+: >"$CURL_URL_LOG"
+printf '200|{}\n200|\n200|success\n200|\n' >"$CURL_RESPONSE_QUEUE"
+refresh_output=$(env -u AWS_METADATA_URL \
+  HOME="$SYSTEM_MODE_HOME" PATH="$FIXTURES:$PATH" \
+  MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
+  MOCK_CURL_PROFILE_NAME=sensitive-profile \
+  MOCK_CURL_URL_LOG="$CURL_URL_LOG" "$CLI" refresh --no-open)
+if [[ $refresh_output != 'AWS metadata credentials refreshed.' ]] ||
+   [[ $(<"$CURL_URL_LOG") != \
+  $'GET http://169.254.169.254/profile\nGET http://169.254.169.254/latest/meta-data/iam/security-credentials/\nPOST http://169.254.169.254/refresh\nPOST http://169.254.169.254/profile' ]]; then
+  printf 'Unexpected system-mode refresh sequence: %s\n' "$refresh_output" >&2
+  cat "$CURL_URL_LOG" >&2
+  exit 1
+fi
+
+printf '200|{}\n200|\n200|success\n401|\n' >"$CURL_RESPONSE_QUEUE"
+refresh_exit=0
+refresh_output=$(MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
+  MOCK_CURL_PROFILE_NAME=sensitive-profile \
+  "$CLI" refresh --no-open --json) || refresh_exit=$?
+if [[ $refresh_exit -ne 4 ]] ||
+   [[ $refresh_output != \
+  '{"state":"authentication_required","message":"Authentication is required in the browser interface at http://127.0.0.1:9876."}' ]] ||
+   [[ $refresh_output == *'sensitive-profile'* ]]; then
+  printf 'Unexpected interactive refresh result: %s\n' "$refresh_output" >&2
+  exit 1
+fi
+
+printf '200|{}\n200|\n500|sensitive-refresh-detail\n' >"$CURL_RESPONSE_QUEUE"
+refresh_exit=0
+refresh_output=$(MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
+  MOCK_CURL_PROFILE_NAME=sensitive-profile \
+  "$CLI" refresh --no-open --json) || refresh_exit=$?
+if [[ $refresh_exit -ne 6 ]] ||
+   [[ $refresh_output != \
+  '{"state":"error","message":"Unable to clear the upstream credential cache."}' ]] ||
+   [[ $refresh_output == *'sensitive-'* ]]; then
+  printf 'Unexpected cache-clear failure result: %s\n' "$refresh_output" >&2
+  exit 1
+fi
+
+refresh_exit=0
+refresh_output=$(MOCK_CURL_STATUS=500 MOCK_CURL_BODY='profile not set' \
+  "$CLI" refresh --json) || refresh_exit=$?
+if [[ $refresh_exit -ne 6 ]] ||
+   [[ $refresh_output != \
+  '{"state":"no_profile","message":"No AWS metadata profile is selected."}' ]]; then
+  printf 'Unexpected no-profile refresh result: %s\n' "$refresh_output" >&2
+  exit 1
+fi
+assert_exit 2 "$CLI" refresh unexpected
+assert_exit 2 "$CLI" refresh --wait invalid
+
 status_output=$(MOCK_CURL_STATUS=200 "$CLI" status --json)
 if [[ $status_output != \
   '{"state":"running","endpoint":"http://127.0.0.1:9876","profile_name":"test-profile","profile":{"name":"test-profile"}}' ]]; then

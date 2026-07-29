@@ -101,7 +101,16 @@ consumer before claiming compatibility.
 
 Native services return after logout or reboot, but the developer must select a
 profile again after the broker restarts. Upstream `aws-runas` owns temporary
-credential refresh and browser-session behavior.
+credential refresh and browser-session behavior. In both modes, an expired role
+credential is renewed on the next provider request while the underlying
+authentication session remains usable. User mode invokes `aws-runas` anew for
+each `credential_process` refresh; system mode lets the long-running upstream
+metadata service refresh its own cache.
+
+When the browser, identity-provider, or MFA session also requires interaction,
+run `aws-metadata refresh`. It clears the upstream credential cache and
+reselects the currently active profile without requiring or printing its name.
+This does not invalidate credentials already cached by a consumer.
 
 `aws-metadata clear` deliberately restarts only the user broker and verifies
 that it returns to healthy no-profile state. This prevents later metadata
