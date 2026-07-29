@@ -178,8 +178,12 @@ Use the isolated identity test in
   system mode, use the optional `local-metadata` compatibility profile when
   the integration cannot use its default chain.
 - The AWS Toolkit connection remains named `default` or `local-metadata` when
-  the globally active upstream profile changes. Refresh or reconnect that
-  Toolkit connection before deciding it retained the wrong identity.
+  the globally active upstream profile changes. In user mode, run
+  **AWS: Sign Out**, then **AWS: Switch Connection** and select `default`
+  again. Refreshing the Explorer or merely reselecting `default` does not clear
+  its cached `credential_process` result.
+- If the Toolkit sign-out action is unavailable, run
+  **Developer: Reload Window** before reconnecting.
 - Confirm the application has not disabled IMDS.
 - Restart the GUI after changing AWS configuration if it caches profiles.
 - For automation, use the absolute package-managed `aws-metadata` path rather

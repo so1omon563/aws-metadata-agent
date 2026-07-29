@@ -181,6 +181,9 @@ def validate_reader_contract(root: Path) -> None:
         "| macOS user mode | `default` | Project-owned `credential_process` |",
         "| System mode | `local-metadata` | EC2 instance metadata |",
         "Do not select `example-nonprod` in the Toolkit",
+        "**AWS: Sign Out**",
+        "**AWS: Switch Connection**",
+        "refresh does not invalidate a cached",
     ):
         if required not in consumers:
             raise DocsError(
