@@ -14,7 +14,7 @@ endpoint reachability as credential access, not merely network connectivity.
 | Runtime and host | Network path | Evidence |
 | --- | --- | --- |
 | Docker Desktop on Apple Silicon macOS 26 | Default container networking to the installed host endpoint | Validated with the installed agent and no AWS credential environment variables or mounted AWS files |
-| Docker Desktop image using macOS user mode | Image-configured `host.docker.internal:18080` IMDS endpoint | Image-specific contract; not transparent routing |
+| `so1omon/tf_image:v1.0.2` using macOS user mode | Image-configured `host.docker.internal:18080` IMDS endpoint | AWS CLI and Terraform AWS provider validated with a synthetic credential fixture; not transparent routing |
 | Docker Engine on GitHub-hosted Ubuntu 24.04 x86_64 | Default Docker bridge to a host-owned `169.254.169.254/32` listener | Validated on every Linux CI run by `tests/container-runtime-linux.sh` |
 | Podman | Varies by rootful or rootless network backend | Not yet validated |
 | Kubernetes | Varies by cluster, CNI, and cloud metadata interception | Not tested and not part of the support claim |
@@ -43,25 +43,29 @@ Linux installation boundary to x86_64.
 
 ## Configured images with macOS user mode
 
-A maintained Docker Desktop image can make user mode available to every
-downstream consumer of that image without changing copied launchers. When the
+Starting with
+[`so1omon/tf_image:v1.0.2`](https://github.com/so1omon563/tf-image-build/releases/tag/v1.0.2),
+the maintained Terraform image makes user mode available to downstream
+consumers without changing copied `tf_image` or `tg_ci.sh` launchers. When the
 host service is available, the image configures:
 
 ```text
 AWS_EC2_METADATA_SERVICE_ENDPOINT=http://host.docker.internal:18080
 ```
 
-The image must preserve a value explicitly supplied by its caller and retain
-normal standard-IMDS behavior when user mode is unavailable. The container then
-uses its ordinary AWS default credential chain; it does not receive an
-`AWS_PROFILE`, credential values, or a host AWS-file mount.
+The released image preserves a value explicitly supplied by its caller and
+retains normal standard-IMDS behavior when user mode is unavailable. The
+container then uses its ordinary AWS default credential chain; it does not
+receive an `AWS_PROFILE`, credential values, or a host AWS-file mount.
 
 Do not use
 `AWS_CONTAINER_CREDENTIALS_FULL_URI=http://host.docker.internal:18080/credentials`
 as the portable image contract. Some AWS tools reject plain-HTTP container
 credential hosts that are not loopback or recognized AWS metadata addresses.
-The custom IMDS endpoint is supported by AWS CLI v2 and modern AWS SDKs, but
-the exact image and bundled consumer versions still require validation.
+The v1.0.2 release contract validates its bundled AWS CLI and a representative
+Terraform AWS provider against a synthetic credential endpoint without making
+an AWS API call. Other bundled or user-installed consumers still require
+consumer-specific validation.
 
 This is not transparent support for arbitrary images. An image that continues
 to request literal `169.254.169.254` requires system mode.

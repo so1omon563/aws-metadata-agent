@@ -64,7 +64,7 @@ trusted host consumer
  aws-runas ECS-mode broker at 127.0.0.1:18080
   ECS and IMDS credential routes, browser API, ~/.aws caches
 
-configured Docker Desktop image
+so1omon/tf_image:v1.0.2 or later
                 |
                 | IMDS through host.docker.internal:18080
                 +----------------------------------------^
@@ -78,6 +78,11 @@ The project-owned setting in the default AWS profile uses upstream's
 process-credential JSON for the globally active broker profile. Setup
 preserves unrelated default settings and refuses to replace another default
 credential provider.
+
+The maintained Terraform image performs a credential-free health check for the
+Docker Desktop host endpoint at startup and sets the standard
+`AWS_EC2_METADATA_SERVICE_ENDPOINT` only when the caller did not supply one.
+The launchers do not inject credentials, mount AWS files, or require changes.
 
 ## Installed layout
 

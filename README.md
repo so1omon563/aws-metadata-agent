@@ -12,9 +12,11 @@ AWS files, or custom SDK endpoints.
 
 macOS user mode provides the same friendly global profile-selection workflow
 without administrator access. It uses a host-only loopback broker and a
-project-owned `credential_process` in the default AWS profile. Docker Desktop
-images can use that broker when they are configured for its host endpoint;
-arbitrary unmodified containers remain a system-mode capability.
+project-owned `credential_process` in the default AWS profile. Starting with
+[`so1omon/tf_image:v1.0.2`](https://github.com/so1omon563/tf-image-build/releases/tag/v1.0.2),
+the maintained Terraform image detects that broker automatically on Docker
+Desktop without launcher changes. Arbitrary unmodified containers remain a
+system-mode capability.
 
 ```text
 Developer selects an aws-runas profile
@@ -72,7 +74,7 @@ endpoint to software you do not fully trust.
 | Browser-backed SAML/OIDC | Validated | Unverified | Unverified |
 | Standard AWS CLI metadata discovery | Validated | Validated | Unverified |
 | Transparent system-mode container routing | Docker Desktop validated | Separate Docker Engine x86_64 CI routing evidence | Runtime-specific and unverified |
-| Configured user-mode container images | Docker Desktop endpoint contract; image-specific validation required | Not supported | Unverified |
+| Configured user-mode container images | `so1omon/tf_image:v1.0.2` validated on Docker Desktop | Not supported | Unverified |
 | Stream Deck automation | Validated | Not applicable | Unverified |
 
 Supported hosts require Bash 3.2 or newer, `aws-runas` 3.9.0, and `curl`.
