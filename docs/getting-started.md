@@ -17,7 +17,8 @@ You need:
 
 - Apple Silicon macOS 26 or Ubuntu 24.04 LTS ARM64;
 - a trusted, single-developer workstation;
-- administrator access for native service setup; and
+- administrator access for transparent system mode, or supported macOS user
+  mode when elevation is unavailable; and
 - an `aws-runas` profile, or enough information to configure one.
 
 The endpoint exposes one globally active profile to every reachable consumer.
@@ -29,22 +30,24 @@ or containers should not share one AWS identity.
 ### Apple Silicon macOS 26
 
 Review and trust the third-party tap, install its unprivileged payload, then
-run the separate native-service setup:
+run the separate user-scoped setup:
 
 ```sh
 brew trust --tap so1omon563/aws-metadata-agent
 brew tap so1omon563/aws-metadata-agent
 brew install aws-metadata-agent
-aws-metadata setup
+aws-metadata setup --mode user
 ```
 
 If `aws-runas` is absent from `PATH` and `~/.local/bin`, setup downloads the
-pinned upstream release and verifies its published checksum. It then requests
-administrator access for the native service payload and networking. The
-credential broker still runs as the installing user.
+pinned upstream release and verifies its published checksum. User mode creates
+only a user LaunchAgent and a marked `local-metadata` compatibility profile.
+It does not request administrator access.
 
-Use [Homebrew installation](homebrew.md) for tap inspection, exact setup
-behavior, conditional App Management permission, recovery, and uninstall.
+Use [macOS user mode](user-mode.md) for its consumer and container boundaries.
+Choose `aws-metadata setup --mode system` only when the transparent link-local
+endpoint is required. [Homebrew installation](homebrew.md) covers tap
+inspection, conditional App Management permission, recovery, and uninstall.
 
 ### Ubuntu 24.04 LTS ARM64
 
@@ -112,14 +115,14 @@ aws-metadata diagnose
 Before the first selection, expected status is:
 
 ```text
-AWS metadata service is running at http://169.254.169.254.
+AWS metadata service is running at http://127.0.0.1:18080.
 No profile is selected.
 ```
 
-No profile is a healthy startup state. If `diagnose` reports `aws-runas: not
-found` after setup bootstrapped `~/.local/bin/aws-runas`, configure the shell
-path as described above; the installed root-owned broker copy can still be
-running correctly.
+No profile is a healthy startup state. In system mode the endpoint is
+`http://169.254.169.254` instead. If `diagnose` reports `aws-runas: not found`
+after setup bootstrapped `~/.local/bin/aws-runas`, configure the shell path as
+described above; the configured broker can still be running correctly.
 
 ## 4. Select the profile
 
@@ -150,8 +153,9 @@ Complete the [verification checklist](verification.md). It proves, in order:
 4. provider-isolated AWS credentials through metadata; and
 5. any optional application or container boundary you actually need.
 
-When those checks pass, the happy path is complete. Applications using the
-default AWS credential chain need no project-specific wrapper or endpoint.
+When those checks pass, the happy path is complete. User-mode applications
+select `local-metadata`; system-mode applications using the default AWS
+credential chain need no project-specific wrapper or endpoint.
 
 When work with the active identity is complete, return the broker to healthy
 no-profile state:

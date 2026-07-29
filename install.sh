@@ -14,6 +14,7 @@ install_cli=true
 package_cli=''
 user_path=${AWS_METADATA_USER_PATH:-$PATH}
 agent_version=''
+install_mode=system
 readonly CONFIG_SCHEMA_VERSION=1
 readonly SERVICE_DIR=/usr/local/libexec/aws-metadata-agent
 readonly SERVICE_AWS_RUNAS=$SERVICE_DIR/aws-runas
@@ -21,6 +22,8 @@ readonly SERVICE_SERVER=$SERVICE_DIR/aws-metadata-server
 readonly SERVICE_FORWARDER=$SERVICE_DIR/aws-metadata-forwarder
 readonly SERVICE_NETWORK=$SERVICE_DIR/aws-metadata-network
 readonly SERVICE_VERSION=$SERVICE_DIR/VERSION
+readonly USER_STATE_RELATIVE='Library/Application Support/aws-metadata-agent'
+readonly BROKER_LABEL=com.github.so1omon563.aws-metadata-agent.broker
 
 macos_home_directory() {
   local record
@@ -70,16 +73,35 @@ find_systemd_socket_proxyd() {
 usage() {
   cat <<'EOF'
 Usage: ./install.sh [--user USER] [--aws-runas PATH]
+                    [--mode system|user]
                     [--no-install-cli | --package-cli PATH]
 
-Installs a user-owned aws-runas credential broker plus the minimum privileged
-network forwarding needed for the standard 169.254.169.254:80 endpoint.
-Administrator access is required during installation.
+System mode installs the standard 169.254.169.254:80 endpoint and requires
+administrator access. User mode is macOS-only, listens on 127.0.0.1:18080,
+and installs no privileged files or services.
 
   --no-install-cli  Leave command installation to a package manager.
   --package-cli     Record the package-managed command path and remove a
                     conflicting CLI left by an earlier source installation.
 EOF
+}
+
+render_broker_plist() {
+  local server_path=$1
+  local config_path=$2
+  local log_path=$3
+  local output_path=$4
+  local server_replacement config_replacement log_replacement
+
+  server_replacement=$(sed_replacement_escape "$(xml_escape "$server_path")")
+  config_replacement=$(sed_replacement_escape "$(xml_escape "$config_path")")
+  log_replacement=$(sed_replacement_escape "$(xml_escape "$log_path")")
+  sed \
+    -e "s|__SERVER_PATH__|$server_replacement|g" \
+    -e "s|__CONFIG_PATH__|$config_replacement|g" \
+    -e "s|__LOG_PATH__|$log_replacement|g" \
+    "$PROJECT_DIR/launchd/com.github.so1omon563.aws-metadata-agent.broker.plist" \
+    >"$output_path"
 }
 
 launchctl_bootstrap_with_retry() {
@@ -100,6 +122,102 @@ launchctl_bootstrap_with_retry() {
   return 1
 }
 
+install_user_mode() {
+  local state_dir config_file marker_file runas_file
+  local agent_dir agent_file log_dir log_file aws_dir aws_config
+  local metadata_ready=false
+
+  if [[ $(uname -s) != Darwin ]]; then
+    printf '%s\n' 'User mode is currently supported only on macOS.' >&2
+    return 2
+  fi
+  if [[ $(id -u) != "$target_uid" || $target_user != "${USER:-}" ]]; then
+    printf '%s\n' 'User mode can install only for the current login user.' >&2
+    return 2
+  fi
+  if [[ -z $package_cli ]]; then
+    printf '%s\n' \
+      'User mode requires the stable package-managed aws-metadata command.' >&2
+    return 2
+  fi
+  if [[ -e /etc/aws-metadata-agent/config ]]; then
+    printf '%s\n' \
+      'System mode is already installed; uninstall it before enabling user mode.' >&2
+    return 2
+  fi
+
+  state_dir=$target_home/$USER_STATE_RELATIVE
+  config_file=$state_dir/config
+  marker_file=$state_dir/user-mode
+  runas_file=$state_dir/aws-runas-path
+  agent_dir=$target_home/Library/LaunchAgents
+  agent_file=$agent_dir/$BROKER_LABEL.plist
+  log_dir=$target_home/Library/Logs
+  log_file=$log_dir/aws-metadata-agent.log
+  aws_dir=$target_home/.aws
+  aws_config=$aws_dir/config
+
+  "$PROJECT_DIR/libexec/aws-metadata-config" validate "$aws_config"
+
+  umask 077
+  mkdir -p "$state_dir" "$aws_dir"
+  chmod 0700 "$state_dir"
+  umask 022
+  mkdir -p "$agent_dir" "$log_dir"
+  {
+    printf 'AWS_METADATA_AGENT_VERSION=%q\n' "$agent_version"
+    printf 'AWS_METADATA_CONFIG_VERSION=%q\n' "$CONFIG_SCHEMA_VERSION"
+    printf 'AWS_METADATA_MODE=%q\n' user
+    printf 'AWS_METADATA_USER=%q\n' "$target_user"
+    printf 'AWS_METADATA_UID=%q\n' "$target_uid"
+    printf 'AWS_METADATA_HOME=%q\n' "$target_home"
+    printf 'AWS_RUNAS=%q\n' "$aws_runas"
+    printf 'AWS_METADATA_PORT=%q\n' 18080
+  } >"$config_file"
+  chmod 0600 "$config_file"
+  printf '%s\n' "$aws_runas" >"$runas_file"
+  chmod 0600 "$runas_file"
+  printf '%s\n' user >"$marker_file"
+  chmod 0600 "$marker_file"
+
+  render_broker_plist \
+    "$PROJECT_DIR/libexec/aws-metadata-server" \
+    "$config_file" "$log_file" "$agent_file"
+  chmod 0644 "$agent_file"
+
+  launchctl bootout "gui/$target_uid/$BROKER_LABEL" >/dev/null 2>&1 || true
+  launchctl_bootstrap_with_retry \
+    "gui/$target_uid" "$agent_file" "$BROKER_LABEL"
+
+  printf '%s' 'Waiting for the user-mode metadata endpoint'
+  for _ in {1..50}; do
+    if curl --silent --show-error --noproxy '*' \
+      --connect-timeout 1 --max-time 2 \
+      --output /dev/null http://127.0.0.1:18080/profile 2>/dev/null; then
+      metadata_ready=true
+      break
+    fi
+    printf '.'
+    sleep 0.1
+  done
+  printf '\n'
+  if [[ $metadata_ready != true ]]; then
+    printf '%s\n' \
+      'User-mode setup did not make http://127.0.0.1:18080 reachable.' >&2
+    return 1
+  fi
+
+  "$PROJECT_DIR/libexec/aws-metadata-config" \
+    add "$aws_config" "$package_cli"
+
+  printf 'aws-metadata-agent user mode installed for %s.\n' "$target_user"
+  printf 'Version: %s\n' "$agent_version"
+  printf '%s\n' 'No administrator access or system networking was used.'
+  printf '%s\n' 'Consumer profile: local-metadata'
+  printf '%s\n' 'Run: aws-metadata status'
+  printf '%s\n' 'Open: http://127.0.0.1:18080'
+}
+
 while (($#)); do
   case $1 in
     --user)
@@ -109,6 +227,10 @@ while (($#)); do
     --aws-runas)
       shift
       aws_runas=${1:?--aws-runas requires a value}
+      ;;
+    --mode)
+      shift
+      install_mode=${1:?--mode requires a value}
       ;;
     --user-path)
       shift
@@ -134,6 +256,11 @@ while (($#)); do
   esac
   shift
 done
+
+if [[ $install_mode != system && $install_mode != user ]]; then
+  printf 'Unsupported install mode: %s.\n' "$install_mode" >&2
+  exit 2
+fi
 
 if [[ -n $package_cli && $package_cli != /* ]]; then
   printf '%s\n' '--package-cli requires an absolute path.' >&2
@@ -197,12 +324,24 @@ if [[ -z $aws_runas || ! -x $aws_runas ]]; then
   exit 2
 fi
 
+if [[ $install_mode == user ]]; then
+  install_user_mode
+  exit $?
+fi
+
+if [[ -e "$target_home/$USER_STATE_RELATIVE/user-mode" ]]; then
+  printf '%s\n' \
+    'User mode is already installed; uninstall it before enabling system mode.' >&2
+  exit 2
+fi
+
 if ((EUID != 0)); then
   sudo_args=(
     "$0"
     --user "$target_user"
     --aws-runas "$aws_runas"
     --user-path "$user_path"
+    --mode system
   )
   if [[ $install_cli == false && -z $package_cli ]]; then
     sudo_args+=(--no-install-cli)
@@ -287,6 +426,7 @@ chmod 0644 "$SERVICE_VERSION"
   printf 'AWS_METADATA_UID=%q\n' "$target_uid"
   printf 'AWS_METADATA_HOME=%q\n' "$target_home"
   printf 'AWS_RUNAS=%q\n' "$SERVICE_AWS_RUNAS"
+  printf 'AWS_METADATA_MODE=%q\n' system
   printf 'AWS_METADATA_PORT=%q\n' '18080'
   printf 'AWS_METADATA_LINGER_WAS_ENABLED=%q\n' "$linux_linger_was_enabled"
 } >/etc/aws-metadata-agent/config
@@ -295,8 +435,6 @@ chmod 0644 /etc/aws-metadata-agent/config
 
 case $(uname -s) in
   Darwin)
-    log_path_xml=$(xml_escape "$target_home/Library/Logs/aws-metadata-agent.log")
-    log_path_replacement=$(sed_replacement_escape "$log_path_xml")
     agent_dir=$target_home/Library/LaunchAgents
     log_dir=$target_home/Library/Logs
     agent_file=$agent_dir/com.github.so1omon563.aws-metadata-agent.broker.plist
@@ -308,9 +446,9 @@ case $(uname -s) in
     legacy_proxy_file=$proxy_dir/com.github.aws-metadata-agent.proxy.plist
 
     install -d -o "$target_user" -g "$target_group" -m 0755 "$agent_dir" "$log_dir"
-    sed "s|__LOG_PATH__|$log_path_replacement|g" \
-      "$PROJECT_DIR/launchd/com.github.so1omon563.aws-metadata-agent.broker.plist" \
-      >"$agent_file"
+    render_broker_plist \
+      "$SERVICE_SERVER" /etc/aws-metadata-agent/config \
+      "$target_home/Library/Logs/aws-metadata-agent.log" "$agent_file"
     chown "$target_user":"$target_group" "$agent_file"
     chmod 0644 "$agent_file"
 

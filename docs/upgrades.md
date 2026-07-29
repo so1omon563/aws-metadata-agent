@@ -40,20 +40,21 @@ migrate, or delete an AWS profile.
 
 ## Homebrew upgrade
 
-Homebrew owns the package command; native service setup owns the separate
-root-owned copy and definitions. Upgrade both layers explicitly:
+Homebrew owns the package command; service setup owns the selected launchd
+definition and any system-mode payload. Upgrade both layers explicitly:
 
 ```sh
 brew update
 brew upgrade aws-metadata-agent
-aws-metadata setup
+aws-metadata setup --mode user
+# or: aws-metadata setup --mode system
 aws-metadata version
 aws-metadata status
 aws-metadata diagnose
 ```
 
-`aws-metadata setup` reruns the reviewed installer and refreshes the service
-payload from the package. Reinstalling the same version is supported.
+Rerunning the same explicit setup mode refreshes its service payload from the
+package. Reinstalling the same version is supported.
 
 ## Direct release upgrade
 
@@ -133,7 +134,8 @@ historical version. A rollback therefore changes ownership temporarily from
 Homebrew to a tagged direct/source installation:
 
 ```sh
-aws-metadata uninstall
+aws-metadata uninstall --mode user
+# or: aws-metadata uninstall --mode system
 brew uninstall aws-metadata-agent
 ```
 
@@ -144,7 +146,8 @@ To return to Homebrew, run the older release's `./uninstall.sh`, then:
 
 ```sh
 brew install aws-metadata-agent
-aws-metadata setup
+aws-metadata setup --mode user
+# or: aws-metadata setup --mode system
 ```
 
 Do not leave both source-owned `/usr/local/bin/aws-metadata` and a
@@ -163,16 +166,17 @@ then install the older version from clean state.
 
 ### Homebrew
 
-Remove service state before the package payload:
+Remove the selected service state before the package payload:
 
 ```sh
-aws-metadata uninstall
+aws-metadata uninstall --mode user
+# or: aws-metadata uninstall --mode system
 brew uninstall aws-metadata-agent
 ```
 
 If Homebrew was removed first, reinstall the formula and run
-`aws-metadata uninstall`, or obtain `uninstall.sh` from the matching tagged
-release.
+the matching uninstall command, or obtain `uninstall.sh` from the matching
+tagged release.
 
 ### Direct or source
 

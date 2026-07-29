@@ -12,14 +12,14 @@ upstream `aws-runas` broker. Normal profile changes do not require `sudo`.
 | `clear` | Stop the broker from vending the selected profile to new metadata requests. | Restarts only the user broker when needed and verifies healthy no-profile state. |
 | `active-profile` | Show the selected profile in a shell prompt or status bar. | Prints only the exact live profile name; stays silent when there is nothing to display. |
 | `status` | Check endpoint and active-profile state. | `profile: null` or “No profile is selected” is healthy after startup. |
-| `open` | Open the upstream browser interface. | Opens `http://169.254.169.254`; it does not select a profile. |
+| `open` | Open the upstream browser interface. | Opens the endpoint for the installed mode; it does not select a profile. |
 | `refresh` | Open the browser interface for its **Refresh Now** control. | Currently the same operation as `open`; the CLI itself does not force refresh. |
 | `errors` | Classify recent authentication failures safely. | Reads at most 200 broker log lines and prints redacted summaries for the last 10 matches. |
 | `logs` | Deliberately inspect the full live broker log. | Full logs may contain sensitive profile, identity, or credential data. |
-| `diagnose` | Check installation and service boundaries. | Tests endpoint, link-local address, broker service, log location, and `aws-runas` in the current `PATH`. |
+| `diagnose` | Check installation and service boundaries. | Tests the mode-correct endpoint, broker service, log location, and `aws-runas`; system mode also checks the link-local address. |
 | `version` | Identify the installed agent release. | Reads the root-owned installed `VERSION`. |
-| `setup` | Complete or refresh a Homebrew installation. | Package-only command; conditionally bootstraps `aws-runas`, then runs the privileged installer. |
-| `uninstall` | Remove service state for a Homebrew installation. | Package-only command; preserves user-owned AWS configuration and upstream caches. |
+| `setup` | Complete or refresh a Homebrew installation. | Package-only command; use explicit `--mode user` or `--mode system`. User mode never attempts elevation. |
+| `uninstall` | Remove service state for a Homebrew installation. | Package-only command; use the matching mode. User mode removes only its marked compatibility profile. |
 
 Source and direct-release users run `./install.sh` and `./uninstall.sh` from the
 reviewed matching release instead of the package-only commands.
@@ -181,7 +181,7 @@ The CLI supports bounded diagnostic and test overrides:
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
-| `AWS_METADATA_URL` | Metadata base URL, primarily for an unprivileged test broker. | `http://169.254.169.254` |
+| `AWS_METADATA_URL` | Metadata base URL, primarily for an unprivileged test broker. | Installed user-mode endpoint, otherwise `http://169.254.169.254` |
 | `AWS_METADATA_WAIT_SECONDS` | Default selection wait. | `300` for `use`, `0` for `profile` |
 | `AWS_METADATA_CLEAR_WAIT_SECONDS` | Default wait for the broker to return after `clear`. | `15` |
 | `AWS_METADATA_REQUEST_TIMEOUT` | Explicit HTTP request deadline. | `15`, extended for interactive waits |

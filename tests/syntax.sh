@@ -8,6 +8,7 @@ readonly PROJECT_DIR
 for script in \
   "$PROJECT_DIR/bin/aws-metadata" \
   "$PROJECT_DIR/libexec/aws-metadata-server" \
+  "$PROJECT_DIR/libexec/aws-metadata-config" \
   "$PROJECT_DIR/libexec/aws-metadata-forwarder" \
   "$PROJECT_DIR/libexec/aws-metadata-network" \
   "$PROJECT_DIR/bootstrap.sh" \
@@ -19,6 +20,7 @@ for script in \
   "$PROJECT_DIR/tests/cli.sh" \
   "$PROJECT_DIR/tests/bootstrap.sh" \
   "$PROJECT_DIR/tests/layout.sh" \
+  "$PROJECT_DIR/tests/user-mode.sh" \
   "$PROJECT_DIR/tests/container-runtime-linux.sh" \
   "$PROJECT_DIR/tests/pr-check-wait.sh" \
   "$PROJECT_DIR/tests/release.sh" \

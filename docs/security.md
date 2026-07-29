@@ -28,10 +28,11 @@ metadata service.
 
 ## Credentials are intentionally reachable
 
-The purpose of the service is to let local applications and containers obtain
-temporary AWS credentials without explicit environment injection or AWS file
-mounts. Any process that can reach `169.254.169.254` may be able to obtain the
-active profile's credentials.
+The purpose of the service is to let local applications obtain temporary AWS
+credentials without static credential injection. Any process that can reach
+the installed endpoint may be able to obtain the active profile's credentials:
+`169.254.169.254` in system mode or `127.0.0.1:18080` in macOS user mode.
+Only system mode has validated container-routing paths.
 
 Concrete examples include:
 
@@ -68,6 +69,14 @@ until expiration, and any local caller with endpoint access can select a
 profile again.
 
 ## Privilege boundary
+
+macOS user mode has no privileged layer. Its LaunchAgent, installer state,
+selected upstream binary, log, and marked AWS compatibility profile are all
+owned by the signed-in developer. The package-managed command is referenced by
+absolute path, and setup refuses to coexist with system mode rather than
+silently changing boundaries after an elevation failure.
+
+The remaining section describes system mode.
 
 `aws-runas` does not run as root. A root-owned wrapper rejects startup unless
 its effective uid matches the configured developer uid. The broker therefore

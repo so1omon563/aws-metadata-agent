@@ -179,6 +179,11 @@ documentation.
 
 ## Named metadata profile for profile-oriented tools
 
+This section describes the optional profile for transparent system mode.
+macOS user-mode setup installs a marked `local-metadata` process profile
+automatically; do not replace it with the stanza below. See
+[macOS user mode](user-mode.md).
+
 Some integrations require the user to select a named AWS profile instead of
 using the default credential provider chain directly. The AWS Toolkit for
 Visual Studio Code is one example. A dedicated consumer compatibility profile

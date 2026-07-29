@@ -2,20 +2,61 @@
 
 set -eu
 
+PROJECT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+readonly PROJECT_DIR
 readonly CONFIG_FILE=/etc/aws-metadata-agent/config
+readonly USER_STATE_RELATIVE='Library/Application Support/aws-metadata-agent'
+readonly BROKER_LABEL=com.github.so1omon563.aws-metadata-agent.broker
 package_cli=''
+uninstall_mode=system
 
 usage() {
   cat <<'EOF'
-Usage: ./uninstall.sh [--package-cli PATH]
+Usage: ./uninstall.sh [--mode system|user] [--package-cli PATH]
 
-Stops and removes aws-metadata-agent services, root-owned executables, and
-installer state. User-owned AWS configuration and aws-runas caches are kept.
+System mode removes privileged service state. User mode removes only the
+current user's LaunchAgent, user-mode state, and project-owned compatibility
+profile. Upstream aws-runas caches are kept.
 EOF
+}
+
+uninstall_user_mode() {
+  local target_home=${HOME:-}
+  local target_uid state_dir marker_file agent_file aws_config
+
+  if [[ $(uname -s) != Darwin ]]; then
+    printf '%s\n' 'User mode is currently supported only on macOS.' >&2
+    return 2
+  fi
+  if [[ -z $target_home || $target_home != /* ]]; then
+    printf '%s\n' 'Unable to determine the current user home directory.' >&2
+    return 2
+  fi
+
+  target_uid=$(id -u)
+  state_dir=$target_home/$USER_STATE_RELATIVE
+  marker_file=$state_dir/user-mode
+  agent_file=$target_home/Library/LaunchAgents/$BROKER_LABEL.plist
+  aws_config=$target_home/.aws/config
+
+  if [[ ! -e $marker_file ]]; then
+    printf '%s\n' 'aws-metadata-agent user mode is not installed.'
+    return 0
+  fi
+
+  launchctl bootout "gui/$target_uid/$BROKER_LABEL" >/dev/null 2>&1 || true
+  "$PROJECT_DIR/libexec/aws-metadata-config" remove "$aws_config"
+  rm -f "$agent_file"
+  rm -rf "$state_dir"
+  printf '%s\n' 'aws-metadata-agent user mode uninstalled.'
 }
 
 while (($#)); do
   case $1 in
+    --mode)
+      shift
+      uninstall_mode=${1:?--mode requires a value}
+      ;;
     --package-cli)
       shift
       package_cli=${1:?--package-cli requires a value}
@@ -33,6 +74,11 @@ while (($#)); do
   shift
 done
 
+if [[ $uninstall_mode != system && $uninstall_mode != user ]]; then
+  printf 'Unsupported uninstall mode: %s.\n' "$uninstall_mode" >&2
+  exit 2
+fi
+
 if [[ -n $package_cli && $package_cli != /* ]]; then
   printf '%s\n' '--package-cli requires an absolute path.' >&2
   exit 2
@@ -41,6 +87,11 @@ if [[ -n $package_cli && ! -x $package_cli ]]; then
   printf 'The package-managed command is not executable: %s\n' \
     "$package_cli" >&2
   exit 2
+fi
+
+if [[ $uninstall_mode == user ]]; then
+  uninstall_user_mode
+  exit $?
 fi
 
 if ((EUID != 0)); then
