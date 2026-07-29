@@ -183,7 +183,7 @@ def validate_reader_contract(root: Path) -> None:
         "Do not select `example-nonprod` in the Toolkit",
         "**AWS: Sign Out**",
         "**AWS: Switch Connection**",
-        "refresh does not invalidate a cached",
+        "merely reselecting the connection does not invalidate",
     ):
         if required not in consumers:
             raise DocsError(

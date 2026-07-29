@@ -242,9 +242,9 @@ has one active upstream profile. Concurrent consumers can race:
 2. A coding agent selects profile B.
 3. A later credential refresh by VS Code receives profile B credentials.
 
-The AWS Toolkit caches valid IAM credentials. With the user-mode `default`
-process provider, an immediate switch requires signing out of the Toolkit and
-selecting `default` again; refreshing its Explorer does not invalidate that
+The AWS Toolkit caches valid IAM connection credentials. In either mode, an
+immediate switch requires signing out of the Toolkit and selecting `default`
+or `local-metadata` again; refreshing its Explorer does not invalidate that
 cache.
 
 The project does not currently implement acquire/release, ownership, TTL,

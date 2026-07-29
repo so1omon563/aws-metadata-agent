@@ -93,18 +93,17 @@ for the full portability boundary and official AWS references.
 4. Open an AWS Toolkit view that makes a permitted AWS request and confirm the
    expected account and role locally.
 5. Select a different non-production upstream profile.
-6. In user mode, run **AWS: Sign Out**, then **AWS: Switch Connection** and
-   select `default` again. In system mode, keep `local-metadata` selected and
-   make a new Toolkit request.
+6. Run **AWS: Sign Out**, then **AWS: Switch Connection** and select `default`
+   again in user mode or `local-metadata` again in system mode.
 7. Confirm the Toolkit now uses the second identity while its selected
    consumer profile remains `default` or `local-metadata`.
 
-The Toolkit caches credentials until they expire. In user mode, an Explorer
-refresh does not invalidate a cached `credential_process` result, and neither
-does selecting `default` again; signing out does. If that action is
-unavailable, run **Developer: Reload Window** before reconnecting. Do not
-publish account IDs, role names, real profile names, Toolkit logs, or
-authentication output from this check.
+The Toolkit caches credentials until they expire. In either mode, an Explorer
+refresh or merely reselecting the connection does not invalidate that cache;
+signing out does. If that action is unavailable, run
+**Developer: Reload Window** before reconnecting. Do not publish account IDs,
+role names, real profile names, Toolkit logs, or authentication output from
+this check.
 
 ## Generic SDKs and tools
 

@@ -217,10 +217,10 @@ keeps those mode-specific choices separate. The consumer profile does not
 select or lock an upstream profile, and it does not correspond one-to-one with
 an AWS role. If another caller changes the active agent profile, the consumer
 receives credentials for the new active profile on its next credential
-refresh. In user mode, the Toolkit retains a valid `credential_process` result;
-to apply an immediate change, run **AWS: Sign Out**, then
-**AWS: Switch Connection** and select `default` again. An Explorer refresh
-alone does not invalidate that cache.
+refresh. The Toolkit retains valid connection credentials in either mode; to
+apply an immediate change, run **AWS: Sign Out**, then
+**AWS: Switch Connection** and select `default` or `local-metadata` again. An
+Explorer refresh alone does not invalidate that cache.
 
 No custom endpoint is required because `aws-metadata-agent` exposes the
 standard `169.254.169.254` address. Applications that already use the default
