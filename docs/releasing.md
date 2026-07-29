@@ -49,6 +49,9 @@ Example title:
 Prepare release 0.2.3 #patch #release
 ```
 
+When squash-merging with `gh`, pass that exact title through `--subject`; a
+single-commit branch otherwise uses the commit subject and drops the markers.
+
 The checked-out merge commit is the authoritative marker source. Removing or
 changing the marker from the final squash/merge message must fail before tag
 creation.
