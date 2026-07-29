@@ -35,8 +35,9 @@ release that removes, renames, or reinterprets installer state must increment
 the schema and include a tested migration.
 
 Upgrades preserve user-owned `~/.aws` configuration, upstream credential and
-browser caches, and unrelated personal scripts. They do not create, select,
-migrate, or delete an AWS profile.
+browser caches, and unrelated personal scripts. User-mode setup owns only its
+marked default process provider and refuses to replace another default
+credential source; system mode does not edit AWS configuration.
 
 ## Homebrew upgrade
 

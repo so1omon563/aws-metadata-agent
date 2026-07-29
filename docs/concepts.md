@@ -12,8 +12,9 @@ interface on a developer workstation.
 
 Transparent system mode exposes that interface at `169.254.169.254`. macOS
 user mode preserves the same one-active-profile model on loopback and installs
-a named `local-metadata` process profile for host applications; it does not
-claim transparent container routing.
+a process provider in the default AWS profile for host applications.
+Configured Docker Desktop images can point their IMDS provider at the host
+loopback broker; arbitrary images do not discover it transparently.
 
 ```text
 Developer
@@ -46,7 +47,7 @@ active agent profile             one globally exposed identity
                                        |
                                        | EC2 metadata credential provider
                                        v
-consumer compatibility profile  local-metadata (optional)
+consumer compatibility profile  local-metadata (system mode, optional)
 ```
 
 The **upstream profile** defines how `aws-runas` authenticates and assumes a
@@ -55,8 +56,9 @@ exposed at the metadata endpoint. Applications consume that active identity;
 they do not independently select the upstream profile.
 
 Most AWS SDKs and tools using the default credential provider chain need no
-extra profile. A **consumer compatibility profile**, such as
-`local-metadata`, is only for profile-oriented software that requires a named
+extra profile. User-mode setup owns the default `credential_process`; system
+mode reaches IMDS normally. A **consumer compatibility profile**, such as
+`local-metadata`, is optional in system mode for software that requires a named
 choice while still obtaining credentials from EC2 metadata. It does not bind
 the consumer to one upstream role.
 
@@ -92,7 +94,7 @@ consumer before claiming compatibility.
 | --- | --- | --- | --- |
 | Installed services and executables | Retained | Retained | Removed |
 | Link-local forwarding | Recreated | Recreated | Removed |
-| User-owned AWS profile definitions | Retained | Retained | Preserved |
+| User-owned AWS configuration | Retained | Retained | Project-owned user-mode provider removed |
 | Upstream role credential cache | Subject to expiration | Subject to expiration | Preserved |
 | Upstream browser session state | Provider-controlled | Provider-controlled | Preserved |
 | Active agent profile | Cleared | Cleared | Not applicable |

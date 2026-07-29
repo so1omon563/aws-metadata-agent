@@ -180,8 +180,8 @@ documentation.
 ## Named metadata profile for profile-oriented tools
 
 This section describes the optional profile for transparent system mode.
-macOS user-mode setup installs a marked `local-metadata` process profile
-automatically; do not replace it with the stanza below. See
+macOS user-mode setup instead installs a marked process provider in the
+`[default]` profile. Do not use the stanza below to replace that provider. See
 [macOS user mode](user-mode.md).
 
 Some integrations require the user to select a named AWS profile instead of

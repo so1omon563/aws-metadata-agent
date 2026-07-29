@@ -19,7 +19,7 @@ upstream `aws-runas` broker. Normal profile changes do not require `sudo`.
 | `diagnose` | Check installation and service boundaries. | Tests the mode-correct endpoint, broker service, log location, and `aws-runas`; system mode also checks the link-local address. |
 | `version` | Identify the installed agent release. | Reads the root-owned installed `VERSION`. |
 | `setup` | Complete or refresh a Homebrew installation. | Package-only command; use explicit `--mode user` or `--mode system`. User mode never attempts elevation. |
-| `uninstall` | Remove service state for a Homebrew installation. | Package-only command; use the matching mode. User mode removes only its marked compatibility profile. |
+| `uninstall` | Remove service state for a Homebrew installation. | Package-only command; use the matching mode. User mode removes only its marked default process provider. |
 
 Source and direct-release users run `./install.sh` and `./uninstall.sh` from the
 reviewed matching release instead of the package-only commands.

@@ -34,7 +34,9 @@ command_path=$TEMP_ROOT/aws-metadata
 printf '%s\n' \
   '# existing comment' \
   '[default]' \
-  'region = us-west-2' >"$config_target"
+  'region = us-west-2' \
+  '[profile keep-me]' \
+  'region = us-east-1' >"$config_target"
 chmod 0640 "$config_target"
 ln -s config-target "$config_link"
 printf '%s\n' '#!/bin/sh' 'exit 0' >"$command_path"
@@ -48,8 +50,8 @@ before_mode=$(mode_of "$config_target")
   fail 'AWS config permissions changed'
 grep -Fqx '# existing comment' "$config_target" ||
   fail 'existing AWS config content was removed'
-grep -Fqx '[profile local-metadata]' "$config_target" ||
-  fail 'compatibility profile was not added'
+[[ $(grep -Fxc '[default]' "$config_target") -eq 1 ]] ||
+  fail 'default AWS profile was duplicated'
 grep -Fqx "credential_process = \"$command_path\" _credential-process" \
   "$config_target" || fail 'credential_process command is incorrect'
 
@@ -65,17 +67,43 @@ checksum_after=$(shasum -a 256 "$config_target")
   fail 'AWS config permissions changed during cleanup'
 grep -Fqx '# existing comment' "$config_target" ||
   fail 'existing AWS config content was removed during cleanup'
+grep -Fqx '[profile keep-me]' "$config_target" ||
+  fail 'named AWS profile was removed during cleanup'
 if grep -Fq 'aws-metadata-agent user mode' "$config_target"; then
   fail 'owned AWS config block remained after cleanup'
 fi
 
 conflict=$TEMP_ROOT/aws/conflict
-printf '%s\n' '[profile local-metadata]' 'region = us-east-1' >"$conflict"
+printf '%s\n' \
+  '[default]' \
+  'credential_process = /usr/local/bin/other-provider' >"$conflict"
 if "$CONFIG_HELPER" validate "$conflict" >/dev/null 2>&1; then
-  fail 'validation accepted an unowned compatibility profile'
+  fail 'validation accepted an existing default credential provider'
 fi
 if "$CONFIG_HELPER" add "$conflict" "$command_path" >/dev/null 2>&1; then
-  fail 'setup replaced an unowned compatibility profile'
+  fail 'setup replaced an existing default credential provider'
+fi
+
+credentials_conflict=$TEMP_ROOT/aws/credentials-conflict
+printf '%s\n' \
+  '[default]' \
+  'aws_access_key_id = ASIASYNTHETICONLY' >"$credentials_conflict"
+if "$CONFIG_HELPER" validate "$config_link" "$credentials_conflict" \
+  >/dev/null 2>&1; then
+  fail 'validation accepted default shared credentials'
+fi
+
+migration=$TEMP_ROOT/aws/migration
+printf '%s\n' \
+  '# aws-metadata-agent user mode: begin' \
+  '[profile local-metadata]' \
+  "credential_process = \"$command_path\" _credential-process" \
+  '# aws-metadata-agent user mode: end' >"$migration"
+"$CONFIG_HELPER" add "$migration" "$command_path"
+grep -Fqx '[default]' "$migration" ||
+  fail 'legacy compatibility profile did not migrate to default'
+if grep -Fq '[profile local-metadata]' "$migration"; then
+  fail 'legacy compatibility profile remained after migration'
 fi
 
 server_runas=$TEMP_ROOT/server-aws-runas
@@ -168,8 +196,12 @@ EOF
     fail 'user-mode state did not record its mode'
   grep -Fq "$PROJECT_DIR/libexec/aws-metadata-server" "$agent_file" ||
     fail 'LaunchAgent did not use the package-managed server'
-  grep -Fqx '[profile local-metadata]' "$MOCK_HOME/.aws/config" ||
-    fail 'user-mode setup did not add the compatibility profile'
+  grep -Fqx '[default]' "$MOCK_HOME/.aws/config" ||
+    fail 'user-mode setup did not add the default profile'
+  grep -Fqx \
+    "credential_process = \"$MOCK_CLI\" _credential-process" \
+    "$MOCK_HOME/.aws/config" ||
+    fail 'user-mode setup did not add the default credential provider'
   if grep -Fq 'sudo ' "$MOCK_SERVICE_LOG"; then
     fail 'user-mode setup invoked sudo'
   fi
@@ -187,13 +219,17 @@ EOF
   [[ ! -e $agent_file ]] || fail 'user-mode LaunchAgent remained after uninstall'
   grep -Fqx '# keep this line' "$MOCK_HOME/.aws/config" ||
     fail 'uninstall removed unrelated AWS config'
+  if grep -Fqx '[default]' "$MOCK_HOME/.aws/config"; then
+    fail 'uninstall left a project-created default profile'
+  fi
   if grep -Fq 'aws-metadata-agent user mode' "$MOCK_HOME/.aws/config"; then
     fail 'uninstall left the owned AWS config block'
   fi
 
+  printf '%s\n' '# keep this line' >"$MOCK_HOME/.aws/config"
   printf '%s\n' \
-    '[profile local-metadata]' \
-    'region = us-east-1' >"$MOCK_HOME/.aws/config"
+    '[default]' \
+    'aws_access_key_id = ASIASYNTHETICONLY' >"$MOCK_HOME/.aws/credentials"
   : >"$MOCK_SERVICE_LOG"
   if env \
     PATH="$MOCK_BIN:$PATH" \
@@ -205,7 +241,7 @@ EOF
       --mode user \
       --package-cli "$MOCK_CLI" \
       --aws-runas "$MOCK_RUNAS" >/dev/null 2>&1; then
-    fail 'user-mode setup accepted an unowned compatibility profile'
+    fail 'user-mode setup accepted default shared credentials'
   fi
   [[ ! -e $state_dir ]] ||
     fail 'conflicting setup left user-mode state'

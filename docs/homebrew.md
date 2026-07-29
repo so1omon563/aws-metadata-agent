@@ -49,7 +49,7 @@ install do not invoke `sudo`, change network state, install `aws-runas`, or
 load services. Complete one explicit setup:
 
 ```sh
-# Managed Mac or host-only consumers:
+# Managed Mac, host consumers, or configured Docker Desktop images:
 aws-metadata setup --mode user
 
 # Transparent IMDS and validated container routing:
@@ -64,12 +64,13 @@ the pinned, unmodified binary directly from the official upstream release into
 already available, setup skips the download.
 
 User mode installs a user LaunchAgent, listens on `127.0.0.1:18080`, and adds a
-marked `local-metadata` process profile without `sudo`. System mode requests
-`sudo` for the root-owned service payload, link-local address, and system
-launchd services; its credential broker still runs as the installing user.
+marked process provider to the default AWS profile without `sudo`. System mode
+requests `sudo` for the root-owned service payload, link-local address, and
+system launchd services; its credential broker still runs as the installing
+user.
 The modes refuse to coexist and setup never silently changes modes after a
 blocked elevation attempt. See [macOS user mode](user-mode.md) for its
-host-only consumer boundary.
+host and configured-image consumer boundary.
 
 To use a specific existing binary and skip discovery:
 
@@ -170,7 +171,7 @@ brew uninstall aws-metadata-agent
 
 If Homebrew was removed first, reinstall the formula and run
 the matching uninstall command, or use `uninstall.sh` from the matching tagged
-source release. User mode removes only its marked `local-metadata` block.
+source release. User mode removes only its marked default process provider.
 Other AWS configuration, profiles, and `aws-runas` caches are preserved.
 
 When the formula and tap are no longer needed, remove the tap and its trust
