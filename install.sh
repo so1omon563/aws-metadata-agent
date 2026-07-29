@@ -157,6 +157,8 @@ install_user_mode() {
   aws_dir=$target_home/.aws
   aws_config=$aws_dir/config
 
+  "$PROJECT_DIR/libexec/aws-metadata-config" validate "$aws_config"
+
   umask 077
   mkdir -p "$state_dir" "$aws_dir"
   chmod 0700 "$state_dir"

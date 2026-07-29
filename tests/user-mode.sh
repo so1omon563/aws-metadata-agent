@@ -71,6 +71,9 @@ fi
 
 conflict=$TEMP_ROOT/aws/conflict
 printf '%s\n' '[profile local-metadata]' 'region = us-east-1' >"$conflict"
+if "$CONFIG_HELPER" validate "$conflict" >/dev/null 2>&1; then
+  fail 'validation accepted an unowned compatibility profile'
+fi
 if "$CONFIG_HELPER" add "$conflict" "$command_path" >/dev/null 2>&1; then
   fail 'setup replaced an unowned compatibility profile'
 fi
@@ -187,6 +190,29 @@ EOF
   if grep -Fq 'aws-metadata-agent user mode' "$MOCK_HOME/.aws/config"; then
     fail 'uninstall left the owned AWS config block'
   fi
+
+  printf '%s\n' \
+    '[profile local-metadata]' \
+    'region = us-east-1' >"$MOCK_HOME/.aws/config"
+  : >"$MOCK_SERVICE_LOG"
+  if env \
+    PATH="$MOCK_BIN:$PATH" \
+    HOME="$MOCK_HOME" \
+    USER="$MOCK_USER" \
+    MOCK_HOME="$MOCK_HOME" \
+    MOCK_SERVICE_LOG="$MOCK_SERVICE_LOG" \
+    "$PROJECT_DIR/install.sh" \
+      --mode user \
+      --package-cli "$MOCK_CLI" \
+      --aws-runas "$MOCK_RUNAS" >/dev/null 2>&1; then
+    fail 'user-mode setup accepted an unowned compatibility profile'
+  fi
+  [[ ! -e $state_dir ]] ||
+    fail 'conflicting setup left user-mode state'
+  [[ ! -e $agent_file ]] ||
+    fail 'conflicting setup left a user-mode LaunchAgent'
+  [[ ! -s $MOCK_SERVICE_LOG ]] ||
+    fail 'conflicting setup activated the user-mode broker'
 fi
 
 printf '%s\n' 'User-mode config checks passed.'

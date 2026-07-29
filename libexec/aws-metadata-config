@@ -94,12 +94,35 @@ extract_block() {
   ' "$input" >"$output"
 }
 
+validate_add_target() {
+  block_state=missing
+  [[ -e $config_path ]] || return 0
+
+  begin_count=$(marker_count "$BEGIN_MARKER" "$config_path")
+  end_count=$(marker_count "$END_MARKER" "$config_path")
+  if [[ $begin_count -eq 0 && $end_count -eq 0 ]]; then
+    if grep -Eq '^[[:space:]]*\[(profile[[:space:]]+)?local-metadata\][[:space:]]*$' \
+      "$config_path"; then
+      fail 'AWS profile local-metadata already exists and is not project-owned'
+    fi
+    block_state=plain
+    return 0
+  fi
+  if [[ $begin_count -ne 1 || $end_count -ne 1 ]]; then
+    fail 'AWS config has incomplete or duplicate project ownership markers'
+  fi
+
+  remove_block "$config_path" "$new_file"
+  block_state=owned
+}
+
 command_name=${1:-}
 config_path=${2:-}
 command_path=${3:-}
 
-if [[ $command_name != add && $command_name != remove ]]; then
-  fail 'usage: aws-metadata-config add CONFIG COMMAND | remove CONFIG' 2
+if [[ $command_name != validate && $command_name != add &&
+      $command_name != remove ]]; then
+  fail 'usage: aws-metadata-config validate CONFIG | add CONFIG COMMAND | remove CONFIG' 2
 fi
 if [[ $config_path != /* || $config_path == *$'\n'* ]]; then
   fail 'CONFIG must be an absolute path' 2
@@ -117,7 +140,12 @@ new_file=$temp_dir/new
 block_file=$temp_dir/block
 backup_file=$temp_dir/backup
 
-if [[ $command_name == add ]]; then
+if [[ $command_name == validate || $command_name == add ]]; then
+  validate_add_target
+  if [[ $command_name == validate ]]; then
+    exit 0
+  fi
+
   if [[ $command_path != /* || $command_path == *$'\n'* ||
         $command_path == *'"'* || $command_path == *\\* ||
         ! -x $command_path ]]; then
@@ -125,36 +153,23 @@ if [[ $command_name == add ]]; then
   fi
 
   write_block "$block_file" "$command_path"
-  if [[ ! -e $config_path ]]; then
+  if [[ $block_state == missing ]]; then
     command cp "$block_file" "$new_file"
-    replace_contents "$config_path" "$new_file" "$backup_file"
-    exit 0
-  fi
-
-  begin_count=$(marker_count "$BEGIN_MARKER" "$config_path")
-  end_count=$(marker_count "$END_MARKER" "$config_path")
-  if [[ $begin_count -eq 0 && $end_count -eq 0 ]]; then
-    if grep -Eq '^[[:space:]]*\[(profile[[:space:]]+)?local-metadata\][[:space:]]*$' \
-      "$config_path"; then
-      fail 'AWS profile local-metadata already exists and is not project-owned'
-    fi
+  elif [[ $block_state == plain ]]; then
     command cp "$config_path" "$new_file"
     if [[ -s $new_file ]]; then
       printf '\n' >>"$new_file"
     fi
     command cat "$block_file" >>"$new_file"
-  elif [[ $begin_count -eq 1 && $end_count -eq 1 ]]; then
+  else
     extract_block "$config_path" "$temp_dir/current-block"
     if command cmp -s "$temp_dir/current-block" "$block_file"; then
       exit 0
     fi
-    remove_block "$config_path" "$new_file"
     if [[ -s $new_file ]]; then
       printf '\n' >>"$new_file"
     fi
     command cat "$block_file" >>"$new_file"
-  else
-    fail 'AWS config has incomplete or duplicate project ownership markers'
   fi
 
   replace_contents "$config_path" "$new_file" "$backup_file"
