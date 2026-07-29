@@ -177,13 +177,17 @@ Use the isolated identity test in
 - In user mode, select `default` if the GUI requires a profile choice. In
   system mode, use the optional `local-metadata` compatibility profile when
   the integration cannot use its default chain.
+- The AWS Toolkit connection remains named `default` or `local-metadata` when
+  the globally active upstream profile changes. Refresh or reconnect that
+  Toolkit connection before deciding it retained the wrong identity.
 - Confirm the application has not disabled IMDS.
 - Restart the GUI after changing AWS configuration if it caches profiles.
 - For automation, use the absolute package-managed `aws-metadata` path rather
   than relying on a GUI process's `PATH`.
 - Verify the exact SDK or application provider chain; support varies.
 
-See [Consumer recipes](consumers.md).
+See the
+[mode-specific AWS Toolkit procedure](consumers.md#profile-oriented-consumers).
 
 ## Host works but a container fails
 
