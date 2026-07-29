@@ -124,8 +124,9 @@ consumer you intend to use:
 - Profile-oriented tools such as the AWS Toolkit for Visual Studio Code may
   need the `local-metadata` compatibility profile in
   [Consumer recipes](consumers.md#profile-oriented-consumers).
-- Containers require either transparent system-mode routing or a user-mode
-  image configured as described in
+- Containers require either transparent system-mode routing or a configured
+  user-mode image. `so1omon/tf_image:v1.0.2` and later perform the supported
+  Docker Desktop discovery automatically; see
   [Container runtime validation](container-runtimes.md).
 - Stream Deck automation has a separate
   [verification procedure](stream-deck.md#verify-the-action).

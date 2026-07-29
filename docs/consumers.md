@@ -105,16 +105,21 @@ and watch for global-profile changes during long-running operations.
 ## Containers
 
 System mode provides the transparent container path at `169.254.169.254`.
-A Docker Desktop image can use macOS user mode when the image configures:
+Starting with
+[`so1omon/tf_image:v1.0.2`](https://github.com/so1omon563/tf-image-build/releases/tag/v1.0.2),
+the maintained Terraform image detects a healthy macOS user-mode broker and
+configures:
 
 ```text
 AWS_EC2_METADATA_SERVICE_ENDPOINT=http://host.docker.internal:18080
 ```
 
-Put that setting in the maintained image rather than copied launchers. A
-container cannot reach the host service through its own `127.0.0.1`, and
-arbitrary unmodified images do not discover user mode. Do not inject AWS
-credential values or mount AWS configuration for either path.
+No copied `tf_image` or `tg_ci.sh` launcher change is required. An explicitly
+supplied endpoint remains authoritative, and the image retains standard IMDS
+behavior when user mode is unavailable. A container cannot reach the host
+service through its own `127.0.0.1`, and arbitrary unmodified images do not
+discover user mode. Do not inject AWS credential values or mount AWS
+configuration for either path.
 
 Docker Desktop on the supported Apple Silicon macOS host and default-bridge
 Docker Engine routing on a GitHub-hosted Ubuntu runner have distinct evidence.

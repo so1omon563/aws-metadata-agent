@@ -87,18 +87,20 @@ credentials, `AWS_PROFILE`, web identity, container credentials, and in-code
 providers can still take precedence.
 
 Loopback is host-local. A container's `127.0.0.1` is the container itself, not
-the macOS host. A Docker Desktop image can opt in without copying credentials
-or mounting AWS files by setting:
+the macOS host. Starting with
+[`so1omon/tf_image:v1.0.2`](https://github.com/so1omon563/tf-image-build/releases/tag/v1.0.2),
+the maintained Terraform image opts in automatically without copying
+credentials or mounting AWS files by setting:
 
 ```sh
 AWS_EC2_METADATA_SERVICE_ENDPOINT=http://host.docker.internal:18080
 ```
 
-That setting should be part of the maintained image so downstream launchers do
-not need modification. The image must preserve an endpoint explicitly supplied
-by its caller and fall back normally when the user-mode service is unavailable.
-Arbitrary unmodified images continue to use `169.254.169.254`; use system mode
-when transparent container routing is required.
+No copied `tf_image` or `tg_ci.sh` launcher modification is required. The image
+preserves an endpoint explicitly supplied by its caller and falls back normally
+when the user-mode service is unavailable. Arbitrary unmodified images continue
+to use `169.254.169.254`; use system mode when transparent container routing is
+required.
 
 ## Lifecycle and ownership
 

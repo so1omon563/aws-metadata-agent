@@ -10,8 +10,9 @@ All notable changes to this project are documented here. Changes remain under
 - A macOS `--mode user` setup and uninstall path runs one ECS-mode
   `aws-runas` broker on loopback without `sudo`, installs a reversible
   process provider in the default AWS profile for host applications, supports
-  Docker Desktop images configured for the host endpoint, and keeps the
-  existing transparent system mode explicit and separate.
+  Docker Desktop images configured for the host endpoint, including automatic
+  discovery in `so1omon/tf_image:v1.0.2` and later, and keeps the existing
+  transparent system mode explicit and separate.
 
 ## [0.3.4] - 2026-07-22
 

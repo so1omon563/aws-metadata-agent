@@ -192,11 +192,14 @@ mode. Link-local routing may be forwarded to the host, intercepted by a cloud
 metadata proxy, or dropped. The installer does not modify Docker, Podman,
 Kubernetes, CNI, or VM networking.
 
-For macOS user mode, confirm the maintained image configures
+For macOS user mode with `so1omon/tf_image:v1.0.2` or later, confirm the
+container received
 `AWS_EC2_METADATA_SERVICE_ENDPOINT=http://host.docker.internal:18080`.
-That is a configured-image contract, not transparent EC2 metadata
-compatibility. For system mode, follow the standard-address reachability check.
-See [Container runtime validation](container-runtimes.md).
+The image sets it only after a successful endpoint health check and preserves
+an explicit caller value. That is a configured-image contract, not transparent
+EC2 metadata compatibility. For system mode, follow the standard-address
+reachability check. See
+[Container runtime validation](container-runtimes.md).
 
 ## Profile changes unexpectedly
 
