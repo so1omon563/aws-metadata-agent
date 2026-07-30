@@ -81,7 +81,7 @@ jobs:
         run: ./scripts/build_release_assets.sh "${{ needs.bump-version.outputs.new_tag }}"
 
       - name: Create release
-        uses: so1omon563/release-creator@v1
+        uses: so1omon563/release-creator@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ needs.bump-version.outputs.new_tag }}
