@@ -46,7 +46,7 @@ fish_completion_checksum=$( \
   hash_files "$PROJECT_DIR/completions/aws-runas.fish" | awk '{print $1}'
 )
 [[ $fish_completion_checksum == \
-  e130bc795ccc2d54e11070ec965523a2b6d24a527c36bb0ae192f8d6e3d23db2 ]]
+  a87af302574932cd58a16f7554f10c445c699bbe96a8b3e04451f7741630547f ]]
 
 cat >"$fake_bin/curl" <<'EOF'
 #!/usr/bin/env bash
@@ -132,7 +132,7 @@ case ${file##*/} in
     checksum=ef28853bfd267e09f4eb3b2335581294ad12099daa4a27fe3290e76259f16dec
     ;;
   aws-runas.fish)
-    checksum=e130bc795ccc2d54e11070ec965523a2b6d24a527c36bb0ae192f8d6e3d23db2
+    checksum=a87af302574932cd58a16f7554f10c445c699bbe96a8b3e04451f7741630547f
     ;;
   *)
     checksum=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -399,6 +399,26 @@ mkdir -p "$(dirname "$malformed_fish_file")"
 printf '%s\n' retained "$path_end" user-content >"$malformed_fish_file"
 assert_malformed_markers_refused \
   "$malformed_fish_home" /opt/homebrew/bin/fish "$malformed_fish_file"
+
+if command -v fish >/dev/null 2>&1; then
+  cat >"$fake_bin/aws-runas" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' \
+  'list:Shows IAM roles or MFA device configuration' \
+  'sandbox-profile'
+EOF
+  chmod 0755 "$fake_bin/aws-runas"
+  fish_sentinel=$TEMP_ROOT/fish-completion-sentinel
+  mkdir "$fish_sentinel"
+  : >"$fish_sentinel/filesystem-candidate"
+  # shellcheck disable=SC2016 # Fish expands argv, not Bash.
+  fish_candidates=$(env PATH="$fake_bin:$PATH" fish --no-config -c \
+    'source $argv[1]; cd $argv[2]; complete -C "aws-runas "' \
+    "$PROJECT_DIR/completions/aws-runas.fish" "$fish_sentinel")
+  [[ $fish_candidates == *$'list\tShows IAM roles or MFA device configuration'* ]]
+  [[ $fish_candidates == *'sandbox-profile'* ]]
+  [[ $fish_candidates != *'filesystem-candidate'* ]]
+fi
 
 unsupported_home=$TEMP_ROOT/unsupported
 mkdir -p "$unsupported_home"

@@ -11,10 +11,10 @@ function __fish_aws_runas_complete
     set -l current (commandline -ct)
 
     if string match --quiet -- '-*' "$current"
-        command aws-runas $tokens "$current" --generate-bash-completion 2>/dev/null
-    else
-        command aws-runas $tokens --generate-bash-completion 2>/dev/null
+        set --append tokens "$current"
     end
+    command aws-runas $tokens --generate-bash-completion 2>/dev/null |
+        string replace --regex '^([^:]+):(.*)$' '$1\t$2'
 end
 
-complete --command aws-runas --arguments '(__fish_aws_runas_complete)'
+complete --command aws-runas --no-files --arguments '(__fish_aws_runas_complete)'
