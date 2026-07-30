@@ -7,10 +7,16 @@ All notable changes to this project are documented here. Changes remain under
 
 ### Fixed
 
+- Release checks now require the current tagged version's dated changelog
+  section and comparison link.
+- Homebrew formula updates now drop stale revisions when the upstream version
+  changes while preserving revisions during same-version retries.
 - Shell setup now refuses malformed managed markers instead of risking removal
   of user startup-file content.
 - Installers now require a bounded semantic metadata-protocol response before
   reporting success on macOS user/system mode and Linux system mode.
+- Manual Homebrew publication retries now reject non-latest, draft, prerelease,
+  and formula-downgrade releases before updating the tap.
 
 ## [0.4.2] - 2026-07-30
 

@@ -11,6 +11,9 @@ from pathlib import Path
 
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+FORMULA_VERSION_RE = re.compile(
+    r'(?m)^  url "[^"]*/v(?P<version>\d+\.\d+\.\d+)(?:/|[^"]*)"$'
+)
 
 
 def update_formula(
@@ -22,6 +25,18 @@ def update_formula(
     checksum = checksum_fields[0]
 
     text = path.read_text(encoding="utf-8")
+    current_match = FORMULA_VERSION_RE.search(text)
+    if current_match is None:
+        raise ValueError("formula url does not contain a source version")
+    current_version = current_match.group("version")
+    if tuple(map(int, version.split("."))) < tuple(
+        map(int, current_version.split("."))
+    ):
+        raise ValueError(
+            f"refusing to downgrade formula from {current_version} to {version}"
+        )
+    if current_version != version:
+        text = re.sub(r"(?m)^  revision \d+\r?\n", "", text, count=1)
     text, url_count = re.subn(
         r'(?m)^  url "[^"]+"$', f'  url "{archive_url}"', text, count=1
     )

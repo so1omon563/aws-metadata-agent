@@ -15,6 +15,7 @@ from stage_release import (
     latest_tag_version,
     read_text,
     read_version,
+    run_git,
 )
 
 
@@ -46,7 +47,19 @@ def validate_version_neutral_references(root: Path) -> None:
                 )
 
 
-def validate_links(text: str, version: Version, latest: Version) -> None:
+def previous_tag_version(root: Path, version: Version) -> Version | None:
+    completed = run_git(root, ["tag", "--list", "v[0-9]*"], capture=True)
+    previous = [
+        parsed
+        for tag in completed.stdout.splitlines()
+        if (parsed := Version.parse_tag(tag.strip())) is not None and parsed < version
+    ]
+    return max(previous) if previous else None
+
+
+def validate_links(
+    root: Path, text: str, version: Version, latest: Version
+) -> None:
     unreleased = (
         "[Unreleased]: "
         "https://github.com/so1omon563/aws-metadata-agent/compare/"
@@ -55,14 +68,21 @@ def validate_links(text: str, version: Version, latest: Version) -> None:
     if unreleased not in text:
         raise ReleaseStageError(f"Unreleased comparison must start at v{version}")
 
-    if version != latest:
+    previous = latest if version != latest else previous_tag_version(root, version)
+    if previous is None:
+        release_link = (
+            f"[{version}]: "
+            "https://github.com/so1omon563/aws-metadata-agent/releases/tag/"
+            f"v{version}"
+        )
+    else:
         release_link = (
             f"[{version}]: "
             "https://github.com/so1omon563/aws-metadata-agent/compare/"
-            f"v{latest}...v{version}"
+            f"v{previous}...v{version}"
         )
-        if release_link not in text:
-            raise ReleaseStageError(f"missing comparison link for {version}")
+    if release_link not in text:
+        raise ReleaseStageError(f"missing comparison link for {version}")
 
 
 def check_release(root: Path, bump: str | None) -> None:
@@ -72,8 +92,15 @@ def check_release(root: Path, bump: str | None) -> None:
 
     if version < latest:
         raise ReleaseStageError(f"VERSION {version} is older than latest tag v{latest}")
-    if version > latest:
-        matches = [match.group(1) for match in RELEASE_HEADER_RE.finditer(changelog)]
+    matches = [match.group(1) for match in RELEASE_HEADER_RE.finditer(changelog)]
+    if version == latest:
+        count = matches.count(str(version))
+        if count != 1:
+            raise ReleaseStageError(
+                f"CHANGELOG.md must contain exactly one dated section for {version}; "
+                f"found {count}"
+            )
+    elif version > latest:
         if str(version) not in matches:
             raise ReleaseStageError(f"CHANGELOG.md has no dated section for {version}")
 
@@ -97,7 +124,7 @@ def check_release(root: Path, bump: str | None) -> None:
                 f"staged VERSION {version} is not one semantic bump after v{latest}"
             )
 
-    validate_links(changelog, version, latest)
+    validate_links(root, changelog, version, latest)
     validate_version_neutral_references(root)
 
 

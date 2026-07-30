@@ -56,6 +56,8 @@ git -C "$repo" config user.email test@example.invalid
 git -C "$repo" add .
 git -C "$repo" commit -qm initial
 git -C "$repo" tag v0.2.0
+PYTHONDONTWRITEBYTECODE=1 \
+  python3 "$repo/scripts/check_release.py" --root "$repo" >/dev/null
 
 python3 "$repo/scripts/stage_release.py" \
   --root "$repo" --bump patch --date 2026-07-17 --no-fetch >/dev/null
@@ -104,6 +106,39 @@ printf '%s\n' 'Examples: ./install-release.sh --version X.Y.Z' \
 git -C "$repo" add VERSION CHANGELOG.md README.md docs/direct-install.md install-release.sh
 git -C "$repo" commit -qm release
 git -C "$repo" tag v0.2.1
+python3 "$repo/scripts/check_release.py" --root "$repo" >/dev/null
+
+python3 - "$repo" <<'PY'
+import subprocess
+import sys
+from pathlib import Path
+
+repo = Path(sys.argv[1])
+changelog = repo / "CHANGELOG.md"
+valid = changelog.read_text()
+header = "## [0.2.1] - 2026-07-17\n"
+link = (
+    "[0.2.1]: "
+    "https://github.com/so1omon563/aws-metadata-agent/compare/v0.2.0...v0.2.1"
+)
+cases = {
+    "missing section": valid.replace(header, "", 1),
+    "duplicate section": valid.replace(header, header + header, 1),
+    "missing link": valid.replace(link, "", 1),
+    "wrong link": valid.replace(link, link.replace("v0.2.0", "v0.1.0"), 1),
+}
+for name, content in cases.items():
+    changelog.write_text(content)
+    result = subprocess.run(
+        [sys.executable, repo / "scripts/check_release.py", "--root", repo],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        raise SystemExit(f"Release checks accepted released metadata with {name}.")
+changelog.write_text(valid)
+PY
+
 AWS_METADATA_RELEASE_DIST_DIR="$TEMP_ROOT/dist" \
   "$repo/scripts/build_release_assets.sh" v0.2.1 >/dev/null
 (
@@ -129,8 +164,9 @@ second_checksum=$(cut -d ' ' -f 1 \
 formula="$TEMP_ROOT/aws-metadata-agent.rb"
 cat >"$formula" <<'EOF'
 class AwsMetadataAgent < Formula
-  url "https://example.invalid/v0.2.0.tar.gz"
+  url "https://github.com/so1omon563/aws-metadata-agent/releases/download/v0.2.0/aws-metadata-agent-v0.2.0.tar.gz"
   sha256 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  revision 1
 
   test do
     assert_equal "0.2.0\n", shell_output("#{bin}/aws-metadata version")
@@ -144,6 +180,44 @@ python3 "$repo/scripts/update_homebrew_formula.py" \
 grep -Fq "url \"$archive_url\"" "$formula"
 grep -Fq "sha256 \"$second_checksum\"" "$formula"
 grep -Fq 'assert_equal "0.2.1\n"' "$formula"
+if grep -Fq 'revision 1' "$formula"; then
+  printf '%s\n' 'Formula update retained a revision from the prior version.' >&2
+  exit 1
+fi
+
+sed -i.bak '/sha256/a\
+  revision 1
+' "$formula"
+rm "$formula.bak"
+python3 "$repo/scripts/update_homebrew_formula.py" \
+  "$formula" 0.2.1 "$archive_url" \
+  "$TEMP_ROOT/dist/aws-metadata-agent-v0.2.1.tar.gz.sha256"
+grep -Fq "url \"$archive_url\"" "$formula"
+grep -Fq "sha256 \"$second_checksum\"" "$formula"
+grep -Fq 'assert_equal "0.2.1\n"' "$formula"
+grep -Fq 'revision 1' "$formula"
+
+release_check="$PROJECT_DIR/scripts/check_homebrew_release.sh"
+"$release_check" v0.2.1 v0.2.1 false false v0.2.1
+assert_release_rejected() {
+  if "$release_check" "$@" >/dev/null 2>&1; then
+    printf 'Homebrew release check accepted: %s\n' "$*" >&2
+    exit 1
+  fi
+}
+assert_release_rejected v0.2.0 v0.2.0 false false v0.2.1
+assert_release_rejected v0.2.1 v0.2.1 true false v0.2.1
+assert_release_rejected v0.2.1 v0.2.1 false true v0.2.1
+
+cp "$formula" "$formula.before"
+if python3 "$repo/scripts/update_homebrew_formula.py" \
+  "$formula" 0.2.0 "$archive_url" \
+  "$TEMP_ROOT/dist/aws-metadata-agent-v0.2.1.tar.gz.sha256" \
+  >/dev/null 2>&1; then
+  printf '%s\n' 'Formula update accepted a version downgrade.' >&2
+  exit 1
+fi
+cmp "$formula.before" "$formula"
 
 workflow="$PROJECT_DIR/.github/workflows/bump.yml"
 expected_release_output="release_requested: \${{ steps.bump.outputs.should_release }}"
@@ -153,5 +227,10 @@ if grep -Fq 'PR_TITLE:' "$workflow"; then
   printf '%s\n' 'Release preflight still validates only the PR title.' >&2
   exit 1
 fi
+
+homebrew_workflow="$PROJECT_DIR/.github/workflows/post-release-homebrew.yml"
+grep -Fq 'WORKFLOW_HEAD_SHA:' "$homebrew_workflow"
+grep -Fq "if [ -n \"\$WORKFLOW_HEAD_SHA\" ]; then" "$homebrew_workflow"
+grep -Fq "if [ \"\$tag_sha\" != \"\$workflow_sha\" ]; then" "$homebrew_workflow"
 
 printf '%s\n' 'Release automation tests passed.'

@@ -25,7 +25,8 @@ test:
 			tests/release-installer.sh tests/release.sh \
 			tests/pr-check-wait.sh tests/fixtures/curl tests/fixtures/gh-pr-check \
 			tests/fixtures/journalctl \
-			scripts/build_release_assets.sh scripts/wait_for_pr_check.sh; \
+			scripts/build_release_assets.sh scripts/check_homebrew_release.sh \
+			scripts/wait_for_pr_check.sh; \
 	else \
 		echo "shellcheck not installed; skipped"; \
 	fi

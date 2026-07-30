@@ -14,6 +14,7 @@ for script in \
   "$PROJECT_DIR/bootstrap.sh" \
   "$PROJECT_DIR/install-release.sh" \
   "$PROJECT_DIR/install.sh" \
+  "$PROJECT_DIR/scripts/check_homebrew_release.sh" \
   "$PROJECT_DIR/scripts/build_release_assets.sh" \
   "$PROJECT_DIR/scripts/wait_for_pr_check.sh" \
   "$PROJECT_DIR/uninstall.sh" \
