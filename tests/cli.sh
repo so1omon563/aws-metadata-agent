@@ -566,6 +566,10 @@ if [[ $status_output != \
   printf 'Unexpected empty-profile status output: %s\n' "$status_output" >&2
   exit 1
 fi
+
+MOCK_CURL_REQUIRE_DISABLE_FIRST=true MOCK_CURL_STATUS=500 \
+  MOCK_CURL_BODY='profile not set' assert_exit 0 "$CLI" status --json
+
 assert_exit 2 "$CLI" profile
 
 env -u HOME -u XDG_STATE_HOME -u AWS_METADATA_STATE_DIR \

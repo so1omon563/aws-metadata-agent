@@ -17,6 +17,8 @@ All notable changes to this project are documented here. Changes remain under
   of user startup-file content.
 - Installers now require a bounded semantic metadata-protocol response before
   reporting success on macOS user/system mode and Linux system mode.
+- Metadata requests now ignore user curl startup files so local curl preferences
+  cannot change the CLI's protocol handling.
 - Manual Homebrew publication retries now reject non-latest, draft, prerelease,
   and formula-downgrade releases before updating the tap.
 - Fish completion now emits native candidate descriptions and suppresses
