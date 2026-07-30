@@ -386,6 +386,7 @@ if [[ -r /etc/aws-metadata-agent/config ]]; then
       "$prior_config_version" >&2
     exit 2
   fi
+  prior_config_version=$((10#$prior_config_version))
   if ((prior_config_version > CONFIG_SCHEMA_VERSION)); then
     printf 'Configuration schema %s is newer than this installer supports (%s).\n' \
       "$prior_config_version" "$CONFIG_SCHEMA_VERSION" >&2

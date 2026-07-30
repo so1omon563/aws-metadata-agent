@@ -391,6 +391,13 @@ profile_command() (
     shift
   done
 
+  if [[ ! $wait_seconds =~ ^[0-9]+$ ]]; then
+    printf '%s\n' \
+      'AWS_METADATA_WAIT_SECONDS must be a non-negative integer.' >&2
+    return 2
+  fi
+  wait_seconds=$((10#$wait_seconds))
+
   request_timeout=${AWS_METADATA_REQUEST_TIMEOUT:-}
   if [[ -z $request_timeout ]]; then
     request_timeout=15

@@ -7,6 +7,8 @@ All notable changes to this project are documented here. Changes remain under
 
 ### Fixed
 
+- Decimal wait and persisted schema values now retain base-10 semantics when
+  they contain leading zeroes.
 - Uninstall now preserves service definitions and state when a current launchd
   job or systemd unit cannot be stopped.
 - `aws-metadata diagnose` now fails when the configured `aws-runas` executable
