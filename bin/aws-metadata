@@ -283,6 +283,7 @@ http_request() {
   local request_timeout=${5:-${AWS_METADATA_REQUEST_TIMEOUT:-15}}
   local status curl_exit
   local curl_args=(
+    --disable
     --silent
     --show-error
     --noproxy '*'

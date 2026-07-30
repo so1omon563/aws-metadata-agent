@@ -10,6 +10,11 @@ profile_name_request=false
 response_body=${MOCK_CURL_BODY:-}
 response_status=${MOCK_CURL_STATUS:-200}
 
+if [[ ${MOCK_CURL_REQUIRE_DISABLE_FIRST:-false} == true &&
+      ${1:-} != --disable ]]; then
+  exit 2
+fi
+
 while (($#)); do
   case $1 in
     --output)
