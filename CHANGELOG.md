@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Changes remain under
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-07-30
+
 ### Fixed
 
 - `aws-metadata refresh` now works without options on Apple-provided Bash 3.2
@@ -202,7 +204,8 @@ Other host configurations and Linux container-runtime access remain
 unverified. The metadata endpoint exposes one globally active profile, and the
 active selection must be restored after the broker restarts.
 
-[Unreleased]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.3.4...v0.4.0
 [0.3.4]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.3.3...v0.3.4
