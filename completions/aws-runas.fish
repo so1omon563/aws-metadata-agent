@@ -10,7 +10,7 @@ function __fish_aws_runas_complete
     set -e tokens[1]
     set -l current (commandline -ct)
 
-    if string match --quiet -- '-*' "$current"
+    if test "$current" != --; and string match --quiet -- '-*' "$current"
         set --append tokens "$current"
     end
     command aws-runas $tokens --generate-bash-completion 2>/dev/null |

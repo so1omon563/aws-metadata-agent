@@ -46,7 +46,7 @@ fish_completion_checksum=$( \
   hash_files "$PROJECT_DIR/completions/aws-runas.fish" | awk '{print $1}'
 )
 [[ $fish_completion_checksum == \
-  d5f47b281d4adf3a3b533b9a27674cb2a9ce1d77ed28e22b4b498452ea628d97 ]]
+  7a3f1d200e206b413a9053b62abeaa9dd083ad25e9b1aa665586fd6b27f0a83c ]]
 
 cat >"$fake_bin/curl" <<'EOF'
 #!/usr/bin/env bash
@@ -132,7 +132,7 @@ case ${file##*/} in
     checksum=ef28853bfd267e09f4eb3b2335581294ad12099daa4a27fe3290e76259f16dec
     ;;
   aws-runas.fish)
-    checksum=d5f47b281d4adf3a3b533b9a27674cb2a9ce1d77ed28e22b4b498452ea628d97
+    checksum=7a3f1d200e206b413a9053b62abeaa9dd083ad25e9b1aa665586fd6b27f0a83c
     ;;
   *)
     checksum=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -403,6 +403,13 @@ assert_malformed_markers_refused \
 if command -v fish >/dev/null 2>&1; then
   cat >"$fake_bin/aws-runas" <<'EOF'
 #!/usr/bin/env bash
+if [[ $* == *'serve ecs'* || $* == *'serve ec2'* ]]; then
+  if [[ " $* " == *' -- --generate-bash-completion '* ]]; then
+    exit
+  fi
+  printf '%s\n' -- '--port'
+  exit
+fi
 printf '%s\n' \
   'list:Shows IAM roles or MFA device configuration' \
   'sandbox-profile'
@@ -430,6 +437,13 @@ EOF
     'source $argv[1]; cd $argv[2]; complete -C "aws-runas -r sandbox-profile ./delegated-command delegated-a"' \
     "$PROJECT_DIR/completions/aws-runas.fish" "$fish_sentinel")
   [[ $fish_argument_candidates == *'delegated-argument'* ]]
+  for service_type in ecs ec2; do
+    # shellcheck disable=SC2016 # Fish expands argv, not Bash.
+    fish_service_candidates=$(env PATH="$fake_bin:$PATH" fish --no-config -c \
+      'source $argv[1]; complete -C "aws-runas -r serve $argv[2] --"' \
+      "$PROJECT_DIR/completions/aws-runas.fish" "$service_type")
+    [[ $fish_service_candidates == *'--port'* ]]
+  done
 fi
 
 unsupported_home=$TEMP_ROOT/unsupported
