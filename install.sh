@@ -123,7 +123,11 @@ launchctl_bootstrap_with_retry() {
 }
 
 wait_for_metadata_endpoint() {
-  local endpoint=$1 body_file status body
+  local endpoint=$1 body_file status body json_string profile_object profile_role
+
+  json_string='"([^"\\]|\\(["/\\bfnrt]|u[[:xdigit:]]{4}))*"'
+  profile_object="^\\{${json_string}:${json_string}(,${json_string}:${json_string})*\\}$"
+  profile_role="(^\\{|,)\"role_arn\":${json_string}(,|\\}$)"
 
   body_file=$(mktemp "${TMPDIR:-/tmp}/aws-metadata-install.XXXXXX") || return 1
   for _ in {1..50}; do
@@ -135,8 +139,8 @@ wait_for_metadata_endpoint() {
       body=$(command cat "$body_file"; printf x)
       body=${body%x}
       if [[ $status == 500 && $body == 'profile not set' ]] ||
-         [[ $status == 200 && $body == \{*\} &&
-            $body == *'"role_arn"'*:* ]]; then
+         [[ $status == 200 && $body =~ $profile_object &&
+            $body =~ $profile_role ]]; then
         rm -f "$body_file"
         return 0
       fi
