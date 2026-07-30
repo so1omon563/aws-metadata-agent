@@ -735,8 +735,11 @@ refresh_command() (
   esac
 
   result_status=0
-  profile_command interactive "$profile" "${args[@]}" >/dev/null ||
-    result_status=$?
+  if ((${#args[@]})); then
+    profile_command interactive "$profile" "${args[@]}"
+  else
+    profile_command interactive "$profile"
+  fi >/dev/null || result_status=$?
   case $result_status in
     0)
       print_result "$json" refreshed 'AWS metadata credentials refreshed.'

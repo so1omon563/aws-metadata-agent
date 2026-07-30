@@ -231,7 +231,7 @@ printf '200|{"role_arn":"sensitive-role"}\n200|\n200|success\n200|\n' \
   >"$CURL_RESPONSE_QUEUE"
 refresh_output=$(MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
   MOCK_CURL_PROFILE_NAME=sensitive-profile \
-  MOCK_CURL_URL_LOG="$CURL_URL_LOG" "$CLI" refresh --no-open)
+  MOCK_CURL_URL_LOG="$CURL_URL_LOG" "$CLI" refresh)
 if [[ $refresh_output != 'AWS metadata credentials refreshed.' ]] ||
    [[ $refresh_output == *'sensitive-profile'* ]] ||
    [[ $(<"$CURL_URL_LOG") != \
