@@ -7,6 +7,8 @@ All notable changes to this project are documented here. Changes remain under
 
 ### Fixed
 
+- Uninstall now preserves service definitions and state when a current launchd
+  job or systemd unit cannot be stopped.
 - Release automation now accepts only standalone bump and publication markers
   before invoking the tagging action.
 - Release checks now require the current tagged version's dated changelog
