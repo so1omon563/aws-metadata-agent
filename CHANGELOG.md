@@ -9,6 +9,8 @@ All notable changes to this project are documented here. Changes remain under
 
 - Shell setup now refuses malformed managed markers instead of risking removal
   of user startup-file content.
+- Installers now require a bounded semantic metadata-protocol response before
+  reporting success on macOS user/system mode and Linux system mode.
 
 ## [0.4.2] - 2026-07-30
 

@@ -179,7 +179,22 @@ printf 'launchctl %s\n' "$*" >>"${MOCK_SERVICE_LOG:?}"
 EOF
   cat >"$MOCK_BIN/curl" <<'EOF'
 #!/bin/sh
-exit 0
+output_file=''
+while [ "$#" -gt 0 ]; do
+  case $1 in
+    --output)
+      shift
+      output_file=$1
+      ;;
+  esac
+  shift
+done
+printf '%s' "${MOCK_CURL_BODY:-{\"role_arn\":\"\"}}" >"$output_file"
+printf '%s' "${MOCK_CURL_STATUS:-200}"
+EOF
+  cat >"$MOCK_BIN/sleep" <<'EOF'
+#!/bin/sh
+:
 EOF
   cat >"$MOCK_BIN/sudo" <<'EOF'
 #!/bin/sh
@@ -234,6 +249,36 @@ EOF
   if grep -Fq 'aws-metadata-agent user mode' "$MOCK_HOME/.aws/config"; then
     fail 'uninstall left the owned AWS config block'
   fi
+
+  failed_output=$TEMP_ROOT/readiness-failure-output
+  if env \
+    PATH="$MOCK_BIN:$PATH" \
+    HOME="$MOCK_HOME" \
+    USER="$MOCK_USER" \
+    MOCK_HOME="$MOCK_HOME" \
+    MOCK_SERVICE_LOG="$MOCK_SERVICE_LOG" \
+    MOCK_CURL_STATUS=503 \
+    MOCK_CURL_BODY='wrong listener' \
+    "$PROJECT_DIR/install.sh" \
+      --mode user \
+      --package-cli "$MOCK_CLI" \
+      --aws-runas "$MOCK_RUNAS" >"$failed_output" 2>&1; then
+    fail 'user-mode setup accepted a non-metadata response'
+  fi
+  if grep -Fq 'user mode installed' "$failed_output"; then
+    fail 'failed readiness printed installation success'
+  fi
+  if grep -Fq 'credential_process' "$MOCK_HOME/.aws/config"; then
+    fail 'failed readiness added the default credential provider'
+  fi
+  env \
+    PATH="$MOCK_BIN:$PATH" \
+    HOME="$MOCK_HOME" \
+    USER="$MOCK_USER" \
+    MOCK_SERVICE_LOG="$MOCK_SERVICE_LOG" \
+    "$PROJECT_DIR/uninstall.sh" \
+      --mode user \
+      --package-cli "$MOCK_CLI" >/dev/null
 
   printf '%s\n' '# keep this line' >"$MOCK_HOME/.aws/config"
   printf '%s\n' \

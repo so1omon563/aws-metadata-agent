@@ -10,6 +10,7 @@ test:
 	./tests/bootstrap.sh
 	./tests/cli.sh
 	./tests/layout.sh
+	./tests/installer-readiness.sh
 	./tests/user-mode.sh
 	./tests/release-installer.sh
 	./tests/release.sh
@@ -20,7 +21,7 @@ test:
 			libexec/aws-metadata-forwarder libexec/aws-metadata-network bootstrap.sh \
 			install-release.sh install.sh uninstall.sh tests/syntax.sh tests/cli.sh \
 			tests/bootstrap.sh tests/container-runtime-linux.sh tests/layout.sh \
-			tests/user-mode.sh \
+			tests/installer-readiness.sh tests/user-mode.sh \
 			tests/release-installer.sh tests/release.sh \
 			tests/pr-check-wait.sh tests/fixtures/curl tests/fixtures/gh-pr-check \
 			tests/fixtures/journalctl \

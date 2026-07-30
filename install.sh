@@ -122,10 +122,35 @@ launchctl_bootstrap_with_retry() {
   return 1
 }
 
+wait_for_metadata_endpoint() {
+  local endpoint=$1 body_file status body
+
+  body_file=$(mktemp "${TMPDIR:-/tmp}/aws-metadata-install.XXXXXX") || return 1
+  for _ in {1..50}; do
+    status=000
+    if status=$(curl --silent --show-error --noproxy '*' \
+      --connect-timeout 1 --max-time 2 \
+      --output "$body_file" --write-out '%{http_code}' \
+      "$endpoint/profile" 2>/dev/null); then
+      body=$(command cat "$body_file"; printf x)
+      body=${body%x}
+      if [[ $status == 500 && $body == 'profile not set' ]] ||
+         [[ $status == 200 && $body == \{*\} &&
+            $body == *'"role_arn"'*:* ]]; then
+        rm -f "$body_file"
+        return 0
+      fi
+    fi
+    printf '.'
+    sleep 0.1
+  done
+  rm -f "$body_file"
+  return 1
+}
+
 install_user_mode() {
   local state_dir config_file marker_file runas_file
   local agent_dir agent_file log_dir log_file aws_dir aws_config aws_credentials
-  local metadata_ready=false
 
   if [[ $(uname -s) != Darwin ]]; then
     printf '%s\n' 'User mode is currently supported only on macOS.' >&2
@@ -192,22 +217,14 @@ install_user_mode() {
     "gui/$target_uid" "$agent_file" "$BROKER_LABEL"
 
   printf '%s' 'Waiting for the user-mode metadata endpoint'
-  for _ in {1..50}; do
-    if curl --silent --show-error --noproxy '*' \
-      --connect-timeout 1 --max-time 2 \
-      --output /dev/null http://127.0.0.1:18080/profile 2>/dev/null; then
-      metadata_ready=true
-      break
-    fi
-    printf '.'
-    sleep 0.1
-  done
-  printf '\n'
-  if [[ $metadata_ready != true ]]; then
+  if ! wait_for_metadata_endpoint http://127.0.0.1:18080; then
+    printf '\n'
     printf '%s\n' \
-      'User-mode setup did not make http://127.0.0.1:18080 reachable.' >&2
+      'User-mode setup did not return the expected metadata protocol response.' \
+      >&2
     return 1
   fi
+  printf '\n'
 
   "$PROJECT_DIR/libexec/aws-metadata-config" \
     add "$aws_config" "$package_cli" "$aws_credentials"
@@ -495,26 +512,18 @@ case $(uname -s) in
       system "$forwarder_file" \
       com.github.so1omon563.aws-metadata-agent.forwarder
 
-    metadata_ready=false
     printf '%s' 'Waiting for the metadata endpoint'
-    for _ in {1..50}; do
-      if curl --silent --show-error --noproxy '*' \
-        --connect-timeout 1 --max-time 2 \
-        --output /dev/null http://169.254.169.254/profile 2>/dev/null; then
-        metadata_ready=true
-        break
-      fi
-      printf '.'
-      sleep 0.1
-    done
-    printf '\n'
-    if [[ $metadata_ready != true ]]; then
+    if ! wait_for_metadata_endpoint http://169.254.169.254; then
+      printf '\n'
       printf '%s\n' \
-        'Installation did not make http://169.254.169.254 reachable.' >&2
+        'Installation did not return the expected metadata protocol response.' \
+        >&2
       printf '%s\n' \
-        'Review /var/log/aws-metadata-agent-forwarder.log for launchd errors.' >&2
+        'Review /var/log/aws-metadata-agent-forwarder.log for launchd errors.' \
+        >&2
       exit 1
     fi
+    printf '\n'
     ;;
   Linux)
     proxy=$(find_systemd_socket_proxyd || true)
@@ -555,6 +564,17 @@ case $(uname -s) in
       systemctl --user restart aws-metadata-agent.service
     systemctl enable aws-metadata-agent-address.service aws-metadata-agent.socket
     systemctl restart aws-metadata-agent-address.service aws-metadata-agent.socket
+    printf '%s' 'Waiting for the metadata endpoint'
+    if ! wait_for_metadata_endpoint http://169.254.169.254; then
+      printf '\n'
+      printf '%s\n' \
+        'Installation did not return the expected metadata protocol response.' \
+        >&2
+      printf '%s\n' \
+        'Review the user and system aws-metadata-agent journals for errors.' >&2
+      exit 1
+    fi
+    printf '\n'
     ;;
 esac
 
