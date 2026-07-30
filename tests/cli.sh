@@ -591,9 +591,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 server = HTTPServer(("127.0.0.1", int(sys.argv[1])), Handler)
-server.timeout = 5
-for _ in range(2):
-    server.handle_request()
+server.serve_forever()
 PY
 real_curl_server=$!
 sleep 1
@@ -602,14 +600,17 @@ if ! kill -0 "$real_curl_server" 2>/dev/null; then
   printf '%s\n' 'Real-curl HTTP fixture did not start.' >&2
   exit 1
 fi
+real_curl_status=0
 real_curl_output=$(env \
   CURL_HOME="$real_curl_home" \
   PATH="$real_curl_bin:/usr/bin:/bin" \
   AWS_METADATA_URL="http://127.0.0.1:$real_curl_port" \
   AWS_METADATA_VERSION_FILE="$PROJECT_DIR/VERSION" \
-  "$CLI" status --json)
-wait "$real_curl_server"
-if [[ $real_curl_output != *'"state":"running"'* ]] ||
+  "$CLI" status --json) || real_curl_status=$?
+kill "$real_curl_server"
+wait "$real_curl_server" 2>/dev/null || true
+if [[ $real_curl_status -ne 0 ]] ||
+   [[ $real_curl_output != *'"state":"running"'* ]] ||
    [[ $real_curl_output != *'"profile":null'* ]]; then
   printf 'User curl startup file changed metadata status: %s\n' \
     "$real_curl_output" >&2
