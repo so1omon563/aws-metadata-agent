@@ -173,7 +173,8 @@ is_profile_object() {
   json_string='"([^"\\[:cntrl:]]|\\(["/\\bfnrt]|u[[:xdigit:]]{4}))*"'
   json_ws=$'[ \t\r\n]*'
   profile_object="^${json_ws}\\{${json_ws}(${json_string}${json_ws}:${json_ws}${json_string}(${json_ws},${json_ws}${json_string}${json_ws}:${json_ws}${json_string})*)?${json_ws}\\}${json_ws}$"
-  [[ $value =~ $profile_object ]]
+  printf '%s' "$value" | command iconv -f UTF-8 -t UTF-8 >/dev/null 2>&1 &&
+    (export LC_ALL=C; [[ $value =~ $profile_object ]])
 }
 
 print_result() {

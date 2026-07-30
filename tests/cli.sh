@@ -255,6 +255,7 @@ assert_invalid_status_json 'not-json'
 assert_invalid_status_json '"profile"'
 assert_invalid_status_json '["profile"]'
 assert_invalid_status_json '{"role_arn":}'
+LC_ALL=C assert_invalid_status_json $'{"role_arn":"example-\200"}'
 empty_status=0
 empty_output=$(MOCK_CURL_STATUS=200 MOCK_CURL_BODY_EMPTY=true \
   "$CLI" status --json) || empty_status=$?
