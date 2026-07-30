@@ -114,7 +114,10 @@ assert_not_contains "$PROJECT_DIR/install.sh" 'launchctl kickstart'
 assert_not_contains "$PROJECT_DIR/README.md" 'scoped PF'
 assert_contains \
   "$PROJECT_DIR/install.sh" \
-  'http://169.254.169.254/profile'
+  'wait_for_metadata_endpoint http://127.0.0.1:18080'
+assert_contains \
+  "$PROJECT_DIR/install.sh" \
+  'wait_for_metadata_endpoint http://169.254.169.254'
 assert_contains \
   "$PROJECT_DIR/install.sh" \
   'launchctl_bootstrap_with_retry'

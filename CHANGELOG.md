@@ -15,6 +15,8 @@ All notable changes to this project are documented here. Changes remain under
   changes while preserving revisions during same-version retries.
 - Shell setup now refuses malformed managed markers instead of risking removal
   of user startup-file content.
+- Installers now require a bounded semantic metadata-protocol response before
+  reporting success on macOS user/system mode and Linux system mode.
 - Metadata requests now ignore user curl startup files so local curl preferences
   cannot change the CLI's protocol handling.
 - Manual Homebrew publication retries now reject non-latest, draft, prerelease,
