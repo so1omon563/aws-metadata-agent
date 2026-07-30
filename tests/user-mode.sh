@@ -61,26 +61,66 @@ checksum_after=$(shasum -a 256 "$config_target")
 [[ $checksum_after == "$checksum_before" ]] ||
   fail 'repeated setup changed the AWS config'
 
+awk '{ printf "%s\r\n", $0 }' "$config_target" >"$TEMP_ROOT/crlf-config"
+dd if="$TEMP_ROOT/crlf-config" of="$config_target" 2>/dev/null
+checksum_before=$(shasum -a 256 "$config_target")
+"$CONFIG_HELPER" add "$config_link" "$command_path"
+checksum_after=$(shasum -a 256 "$config_target")
+[[ $checksum_after == "$checksum_before" ]] ||
+  fail 'repeated setup changed a CRLF AWS config'
+
 "$CONFIG_HELPER" remove "$config_link"
 [[ -L $config_link ]] || fail 'AWS config symlink was replaced during cleanup'
 [[ $(mode_of "$config_target") == "$before_mode" ]] ||
   fail 'AWS config permissions changed during cleanup'
-grep -Fqx '# existing comment' "$config_target" ||
+grep -Fqx $'# existing comment\r' "$config_target" ||
   fail 'existing AWS config content was removed during cleanup'
-grep -Fqx '[profile keep-me]' "$config_target" ||
+grep -Fqx $'[profile keep-me]\r' "$config_target" ||
   fail 'named AWS profile was removed during cleanup'
 if grep -Fq 'aws-metadata-agent user mode' "$config_target"; then
   fail 'owned AWS config block remained after cleanup'
 fi
+awk '{ if (sub(/\r$/, "") != 1) exit 1 }' "$config_target" ||
+  fail 'cleanup changed the CRLF line-ending style'
+checksum_before=$(shasum -a 256 "$config_target")
+"$CONFIG_HELPER" remove "$config_link"
+checksum_after=$(shasum -a 256 "$config_target")
+[[ $checksum_after == "$checksum_before" ]] ||
+  fail 'repeated cleanup changed a CRLF AWS config'
+
+malformed=$TEMP_ROOT/aws/malformed-crlf
+printf '%s\r\n' \
+  '# aws-metadata-agent user mode: begin' \
+  'credential_process = user-owned' >"$malformed"
+checksum_before=$(shasum -a 256 "$malformed")
+if "$CONFIG_HELPER" remove "$malformed" >/dev/null 2>&1; then
+  fail 'cleanup accepted a malformed CRLF managed block'
+fi
+checksum_after=$(shasum -a 256 "$malformed")
+[[ $checksum_after == "$checksum_before" ]] ||
+  fail 'cleanup changed a malformed CRLF managed block'
+
+unmarked=$TEMP_ROOT/aws/unmarked-crlf
+printf '%s\r\n' \
+  '# aws-metadata-agent user mode: begin user-owned' \
+  'credential_process = user-owned' \
+  '# aws-metadata-agent user mode: end user-owned' >"$unmarked"
+checksum_before=$(shasum -a 256 "$unmarked")
+"$CONFIG_HELPER" remove "$unmarked"
+checksum_after=$(shasum -a 256 "$unmarked")
+[[ $checksum_after == "$checksum_before" ]] ||
+  fail 'cleanup changed unmarked CRLF configuration'
 
 created_default=$TEMP_ROOT/aws/created-default
-printf '%s\n' '# existing comment' >"$created_default"
+printf '%s\r\n' '# existing comment' >"$created_default"
 "$CONFIG_HELPER" add "$created_default" "$command_path"
-printf '%s\n' 'region = us-west-2' >>"$created_default"
+awk '{ if (sub(/\r$/, "") != 1) exit 1 }' "$created_default" ||
+  fail 'setup mixed line endings while adding a default CRLF profile'
+printf '%s\r\n' 'region = us-west-2' >>"$created_default"
 "$CONFIG_HELPER" remove "$created_default"
-grep -Fqx '[default]' "$created_default" ||
+grep -Fqx $'[default]\r' "$created_default" ||
   fail 'cleanup removed a default profile with user settings'
-grep -Fqx 'region = us-west-2' "$created_default" ||
+grep -Fqx $'region = us-west-2\r' "$created_default" ||
   fail 'cleanup removed a user-added default setting'
 
 conflict=$TEMP_ROOT/aws/conflict
@@ -231,6 +271,11 @@ EOF
     fail 'user-mode setup invoked sudo'
   fi
 
+  awk '{ printf "%s\r\n", $0 }' \
+    "$MOCK_HOME/.aws/config" >"$TEMP_ROOT/managed-crlf-config"
+  dd if="$TEMP_ROOT/managed-crlf-config" \
+    of="$MOCK_HOME/.aws/config" 2>/dev/null
+
   env \
     PATH="$MOCK_BIN:$PATH" \
     HOME="$MOCK_HOME" \
@@ -242,13 +287,15 @@ EOF
 
   [[ ! -e $state_dir ]] || fail 'user-mode state remained after uninstall'
   [[ ! -e $agent_file ]] || fail 'user-mode LaunchAgent remained after uninstall'
-  grep -Fqx '# keep this line' "$MOCK_HOME/.aws/config" ||
+  grep -Fqx $'# keep this line\r' "$MOCK_HOME/.aws/config" ||
     fail 'uninstall removed unrelated AWS config'
-  grep -Fqx '[default]' "$MOCK_HOME/.aws/config" ||
+  grep -Fqx $'[default]\r' "$MOCK_HOME/.aws/config" ||
     fail 'uninstall removed the default profile header'
   if grep -Fq 'aws-metadata-agent user mode' "$MOCK_HOME/.aws/config"; then
     fail 'uninstall left the owned AWS config block'
   fi
+  awk '{ if (sub(/\r$/, "") != 1) exit 1 }' "$MOCK_HOME/.aws/config" ||
+    fail 'uninstall changed the CRLF line-ending style'
 
   failed_output=$TEMP_ROOT/readiness-failure-output
   if env \

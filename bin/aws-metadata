@@ -981,7 +981,7 @@ errors_command() {
 }
 
 diagnose_command() {
-  local status=0 mode=system runas=''
+  local status=0 mode=system runas='' runas_version
 
   printf 'Platform: %s\n' "$(uname -s)"
   if [[ -r $USER_MODE_MARKER ]]; then
@@ -996,7 +996,12 @@ diagnose_command() {
   fi
   if [[ -n $runas && -x $runas ]]; then
     printf 'aws-runas: %s\n' "$runas"
-    "$runas" --version 2>&1 | sed 's/^/  /'
+    if runas_version=$("$runas" --version 2>&1); then
+      printf '%s\n' "$runas_version" | sed 's/^/  /'
+    else
+      printf '%s\n' '  version check failed'
+      status=1
+    fi
   else
     printf '%s\n' 'aws-runas: configured executable not found'
     status=1
