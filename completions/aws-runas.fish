@@ -10,11 +10,40 @@ function __fish_aws_runas_complete
     set -e tokens[1]
     set -l current (commandline -ct)
 
-    if string match --quiet -- '-*' "$current"
-        command aws-runas $tokens "$current" --generate-bash-completion 2>/dev/null
-    else
-        command aws-runas $tokens --generate-bash-completion 2>/dev/null
+    if test "$current" != --; and string match --quiet -- '-*' "$current"
+        set --append tokens "$current"
     end
+    command aws-runas $tokens --generate-bash-completion 2>/dev/null |
+        string replace --regex '^([^:]+):(.*)$' '$1\t$2'
 end
 
-complete --command aws-runas --arguments '(__fish_aws_runas_complete)'
+function __fish_aws_runas_completes_own_arguments
+    set -l tokens (commandline -opc)
+    set -e tokens[1]
+    set -l skip_value false
+
+    for token in $tokens
+        if test "$skip_value" = true
+            set skip_value false
+            continue
+        end
+        switch $token
+            case -d -a -o -M -t -X -J -S -I -W -T -C -U -P -R -O \
+                --duration --role-duration --otp --mfa-serial --mfa-type \
+                --external-id --jump-role --saml-url --saml-entityid \
+                --web-url --web-redirect --web-client --username --password \
+                --provider --output
+                set skip_value true
+            case '-*'
+            case '*'
+                contains -- $token list ls serve srv ssm ecr password passwd pw \
+                    diagnose diag help h
+                return
+        end
+    end
+    return 0
+end
+
+complete --command aws-runas \
+    --condition __fish_aws_runas_completes_own_arguments \
+    --no-files --arguments '(__fish_aws_runas_complete)'

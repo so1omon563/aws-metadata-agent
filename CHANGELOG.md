@@ -15,6 +15,8 @@ All notable changes to this project are documented here. Changes remain under
   of user startup-file content.
 - Manual Homebrew publication retries now reject non-latest, draft, prerelease,
   and formula-downgrade releases before updating the tap.
+- Fish completion now emits native candidate descriptions and suppresses
+  unrelated filesystem suggestions.
 
 ## [0.4.2] - 2026-07-30
 
