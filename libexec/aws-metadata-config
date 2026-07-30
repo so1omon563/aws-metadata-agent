@@ -16,7 +16,16 @@ marker_count() {
   local marker=$1
   local file=$2
 
-  grep -Fxc "$marker" "$file" 2>/dev/null || true
+  command awk -v marker="$marker" '
+    {
+      line = $0
+      sub(/\r$/, "", line)
+      if (line == marker) {
+        count++
+      }
+    }
+    END { print count + 0 }
+  ' "$file"
 }
 
 replace_contents() {
@@ -46,12 +55,11 @@ replace_contents() {
 write_block() {
   local output=$1
   local command_path=$2
+  local line_ending=$3
 
-  {
-    printf '%s\n' "$BEGIN_MARKER"
-    printf 'credential_process = "%s" _credential-process\n' "$command_path"
-    printf '%s\n' "$END_MARKER"
-  } >"$output"
+  printf '%s%scredential_process = "%s" _credential-process%s%s%s' \
+    "$BEGIN_MARKER" "$line_ending" "$command_path" "$line_ending" \
+    "$END_MARKER" "$line_ending" >"$output"
 }
 
 insert_block() {
@@ -84,14 +92,18 @@ remove_block() {
   local output=$2
 
   command awk -v begin="$BEGIN_MARKER" -v end="$END_MARKER" '
-    $0 == begin {
+    {
+      line = $0
+      sub(/\r$/, "", line)
+    }
+    line == begin {
       if (skipping) {
         exit 2
       }
       skipping = 1
       next
     }
-    $0 == end {
+    line == end {
       if (!skipping) {
         exit 2
       }
@@ -112,9 +124,13 @@ extract_block() {
   local output=$2
 
   command awk -v begin="$BEGIN_MARKER" -v end="$END_MARKER" '
-    $0 == begin { copying = 1 }
+    {
+      line = $0
+      sub(/\r$/, "", line)
+    }
+    line == begin { copying = 1 }
     copying { print }
-    $0 == end { copying = 0 }
+    line == end { copying = 0 }
   ' "$input" >"$output"
 }
 
@@ -266,7 +282,14 @@ if [[ $command_name == validate || $command_name == add ]]; then
     fail 'COMMAND must be an executable absolute path' 2
   fi
 
-  write_block "$block_file" "$command_path"
+  line_ending=$'\n'
+  if [[ -s $config_path ]]; then
+    IFS= read -r first_line <"$config_path" || true
+    if [[ $first_line == *$'\r' ]]; then
+      line_ending=$'\r\n'
+    fi
+  fi
+  write_block "$block_file" "$command_path" "$line_ending"
   if [[ $block_state == owned ]]; then
     extract_block "$config_path" "$temp_dir/current-block"
     if command cmp -s "$temp_dir/current-block" "$block_file"; then
@@ -279,12 +302,12 @@ if [[ $command_name == validate || $command_name == add ]]; then
   elif [[ -n $base_path && -s $base_path ]]; then
     command cp "$base_path" "$new_file"
     if [[ -s $new_file ]]; then
-      printf '\n' >>"$new_file"
+      printf '%s' "$line_ending" >>"$new_file"
     fi
-    printf '%s\n' "$DEFAULT_HEADER" >>"$new_file"
+    printf '%s%s' "$DEFAULT_HEADER" "$line_ending" >>"$new_file"
     command cat "$block_file" >>"$new_file"
   else
-    printf '%s\n' "$DEFAULT_HEADER" >"$new_file"
+    printf '%s%s' "$DEFAULT_HEADER" "$line_ending" >"$new_file"
     command cat "$block_file" >>"$new_file"
   fi
 
