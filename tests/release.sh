@@ -169,12 +169,31 @@ cmp "$formula.before" "$formula"
 
 workflow="$PROJECT_DIR/.github/workflows/bump.yml"
 expected_release_output="release_requested: \${{ steps.bump.outputs.should_release }}"
+expected_marker_check="./scripts/release_markers.sh \"\$text\""
 grep -Fq "$expected_release_output" "$workflow"
 grep -Fq 'git log -1 --pretty=%B' "$workflow"
+grep -Fq "$expected_marker_check" "$workflow"
 if grep -Fq 'PR_TITLE:' "$workflow"; then
   printf '%s\n' 'Release preflight still validates only the PR title.' >&2
   exit 1
 fi
+
+marker_check="$PROJECT_DIR/scripts/release_markers.sh"
+[[ $("$marker_check" 'Prepare release #patch #release') == patch ]]
+[[ $("$marker_check" 'Prepare release #minor #publish') == minor ]]
+[[ $("$marker_check" 'Prepare release #MAJOR #SHIP') == major ]]
+
+assert_markers_rejected() {
+  if "$marker_check" "$1" >/dev/null 2>&1; then
+    printf 'Release marker check accepted: %s\n' "$1" >&2
+    exit 1
+  fi
+}
+assert_markers_rejected 'Prepare release'
+assert_markers_rejected 'Prepare release #patch #minor'
+assert_markers_rejected 'Prepare release #patchwork #release'
+assert_markers_rejected 'Prepare release #patch #release-notes'
+assert_markers_rejected 'Prepare release prefix#patch #release'
 
 homebrew_workflow="$PROJECT_DIR/.github/workflows/post-release-homebrew.yml"
 grep -Fq 'WORKFLOW_HEAD_SHA:' "$homebrew_workflow"
