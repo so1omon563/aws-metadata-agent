@@ -5,6 +5,11 @@ All notable changes to this project are documented here. Changes remain under
 
 ## [Unreleased]
 
+### Fixed
+
+- Shell setup now refuses malformed managed markers instead of risking removal
+  of user startup-file content.
+
 ## [0.4.2] - 2026-07-30
 
 ### Fixed

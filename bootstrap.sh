@@ -28,6 +28,32 @@ replace_managed_block() {
     fi
   done
 
+  if [[ -f $file ]] && ! awk '
+    /^# >>> aws-metadata-agent .+ >>>$/ {
+      name = $0
+      sub(/^# >>> /, "", name)
+      sub(/ >>>$/, "", name)
+      if (inside != "" || seen[name]) valid = 0
+      inside = name
+      seen[name] = 1
+    }
+    match($0, /^# <<< aws-metadata-agent .+ <<<$/) {
+      name = $0
+      sub(/^# <<< /, "", name)
+      sub(/ <<</, "", name)
+      if (inside != name || ended[name]) valid = 0
+      inside = ""
+      ended[name] = 1
+    }
+    END {
+      exit !(valid != 0 && inside == "")
+    }
+  ' valid=1 "$file"; then
+    printf 'Malformed aws-metadata-agent managed block in %s; refusing to modify it.\n' \
+      "$file" >&2
+    return 1
+  fi
+
   file_dir=$(dirname "$file")
   mkdir -p "$file_dir"
   temporary_file=$(mktemp "${file}.XXXXXX")
