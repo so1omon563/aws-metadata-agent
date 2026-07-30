@@ -17,6 +17,8 @@ All notable changes to this project are documented here. Changes remain under
   changes while preserving revisions during same-version retries.
 - Shell setup now refuses malformed managed markers instead of risking removal
   of user startup-file content.
+- Metadata requests now ignore user curl startup files so local curl preferences
+  cannot change the CLI's protocol handling.
 - Manual Homebrew publication retries now reject non-latest, draft, prerelease,
   and formula-downgrade releases before updating the tap.
 - Fish completion now emits native candidate descriptions and suppresses
