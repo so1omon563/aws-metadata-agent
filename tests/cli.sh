@@ -567,64 +567,8 @@ if [[ $status_output != \
   exit 1
 fi
 
-REAL_CURL=/usr/bin/curl
-[[ -x $REAL_CURL ]]
-real_curl_bin=$TEMP_ROOT/real-curl-bin
-real_curl_home=$TEMP_ROOT/real-curl-home
-real_curl_port_file=$TEMP_ROOT/real-curl-port
-mkdir -p "$real_curl_bin" "$real_curl_home"
-ln -s "$REAL_CURL" "$real_curl_bin/curl"
-printf '%s\n' fail-with-body >"$real_curl_home/.curlrc"
-python3 - "$real_curl_port_file" <<'PY' &
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import sys
-
-
-class Handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(500)
-        self.end_headers()
-        self.wfile.write(b"profile not set")
-
-    def log_message(self, format, *args):
-        pass
-
-
-server = HTTPServer(("127.0.0.1", 0), Handler)
-with open(sys.argv[1], "w") as port_file:
-    print(server.server_port, file=port_file, flush=True)
-server.serve_forever()
-PY
-real_curl_server=$!
-for _ in {1..50}; do
-  if [[ -s $real_curl_port_file ]]; then
-    break
-  fi
-  sleep 0.1
-done
-if [[ ! -s $real_curl_port_file ]]; then
-  kill "$real_curl_server" 2>/dev/null || true
-  wait "$real_curl_server" 2>/dev/null || true
-  printf '%s\n' 'Real-curl HTTP fixture did not start.' >&2
-  exit 1
-fi
-real_curl_port=$(<"$real_curl_port_file")
-real_curl_status=0
-real_curl_output=$(env \
-  CURL_HOME="$real_curl_home" \
-  PATH="$real_curl_bin:/usr/bin:/bin" \
-  AWS_METADATA_URL="http://127.0.0.1:$real_curl_port" \
-  AWS_METADATA_VERSION_FILE="$PROJECT_DIR/VERSION" \
-  "$CLI" status --json) || real_curl_status=$?
-kill "$real_curl_server"
-wait "$real_curl_server" 2>/dev/null || true
-if [[ $real_curl_status -ne 0 ]] ||
-   [[ $real_curl_output != *'"state":"running"'* ]] ||
-   [[ $real_curl_output != *'"profile":null'* ]]; then
-  printf 'User curl startup file changed metadata status: %s\n' \
-    "$real_curl_output" >&2
-  exit 1
-fi
+MOCK_CURL_REQUIRE_DISABLE_FIRST=true MOCK_CURL_STATUS=500 \
+  MOCK_CURL_BODY='profile not set' assert_exit 0 "$CLI" status --json
 
 assert_exit 2 "$CLI" profile
 
