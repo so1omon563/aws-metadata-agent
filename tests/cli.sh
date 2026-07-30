@@ -566,6 +566,58 @@ if [[ $status_output != \
   printf 'Unexpected empty-profile status output: %s\n' "$status_output" >&2
   exit 1
 fi
+
+REAL_CURL=$(PATH=/usr/local/bin:/usr/bin:/bin command -v curl)
+real_curl_bin=$TEMP_ROOT/real-curl-bin
+real_curl_home=$TEMP_ROOT/real-curl-home
+real_curl_port=$TEMP_ROOT/real-curl-port
+mkdir -p "$real_curl_bin" "$real_curl_home"
+ln -s "$REAL_CURL" "$real_curl_bin/curl"
+printf '%s\n' fail-with-body >"$real_curl_home/.curlrc"
+python3 - "$real_curl_port" <<'PY' &
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import sys
+
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(500)
+        self.end_headers()
+        self.wfile.write(b"profile not set")
+
+    def log_message(self, format, *args):
+        pass
+
+
+server = HTTPServer(("127.0.0.1", 0), Handler)
+with open(sys.argv[1], "w", encoding="utf-8") as port_file:
+    port_file.write(str(server.server_port))
+server.handle_request()
+PY
+real_curl_server=$!
+for _ in {1..50}; do
+  [[ -s $real_curl_port ]] && break
+  sleep 0.1
+done
+if [[ ! -s $real_curl_port ]]; then
+  wait "$real_curl_server" || true
+  printf '%s\n' 'Real-curl HTTP fixture did not start.' >&2
+  exit 1
+fi
+real_curl_output=$(env \
+  CURL_HOME="$real_curl_home" \
+  PATH="$real_curl_bin:/usr/bin:/bin" \
+  AWS_METADATA_URL="http://127.0.0.1:$(<"$real_curl_port")" \
+  AWS_METADATA_VERSION_FILE="$PROJECT_DIR/VERSION" \
+  "$CLI" status --json)
+wait "$real_curl_server"
+if [[ $real_curl_output != *'"state":"running"'* ]] ||
+   [[ $real_curl_output != *'"profile":null'* ]]; then
+  printf 'User curl startup file changed metadata status: %s\n' \
+    "$real_curl_output" >&2
+  exit 1
+fi
+
 assert_exit 2 "$CLI" profile
 
 env -u HOME -u XDG_STATE_HOME -u AWS_METADATA_STATE_DIR \

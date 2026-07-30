@@ -9,6 +9,8 @@ All notable changes to this project are documented here. Changes remain under
 
 - Shell setup now refuses malformed managed markers instead of risking removal
   of user startup-file content.
+- Metadata requests now ignore user curl startup files so local curl preferences
+  cannot change the CLI's protocol handling.
 
 ## [0.4.2] - 2026-07-30
 
