@@ -189,6 +189,23 @@ run_bootstrap() {
     "$PROJECT_DIR/bootstrap.sh" "$@"
 }
 
+assert_malformed_markers_refused() {
+  local home=$1
+  local login_shell=$2
+  local file=$3
+  local before after output
+
+  before=$(hash_files "$file")
+  if output=$(trap - ERR; run_bootstrap \
+    "$home" "$login_shell" --configure-shell 2>&1); then
+    printf 'Bootstrap accepted malformed managed markers in %s.\n' "$file" >&2
+    exit 1
+  fi
+  [[ $output == *'Malformed aws-metadata-agent managed block'* ]]
+  after=$(hash_files "$file")
+  [[ $before == "$after" ]]
+}
+
 for shell_name in zsh bash fish tcsh; do
   home=$TEMP_ROOT/dry-$shell_name
   mkdir -p "$home"
@@ -326,6 +343,62 @@ fish_after=$(hash_files "$fish_path_file" "$fish_completion")
 [[ $fish_before == "$fish_after" ]]
 assert_count "$fish_path_file" 1 '# >>> aws-metadata-agent PATH >>>'
 assert_count "$fish_completion" 1 '# >>> aws-metadata-agent aws-runas completion >>>'
+
+path_start='# >>> aws-metadata-agent PATH >>>'
+path_end='# <<< aws-metadata-agent PATH <<<'
+completion_start='# >>> aws-metadata-agent aws-runas completion >>>'
+for marker_case in \
+  incomplete_start incomplete_end incomplete_completion duplicate reversed nested; do
+  malformed_home=$TEMP_ROOT/malformed-$marker_case
+  mkdir -p "$malformed_home"
+  if [[ $fake_platform == darwin ]]; then
+    malformed_file=$malformed_home/.bash_profile
+  else
+    malformed_file=$malformed_home/.bashrc
+  fi
+  case $marker_case in
+    incomplete_start)
+      printf '%s\n' retained "$path_start" user-content >"$malformed_file"
+      ;;
+    incomplete_end)
+      printf '%s\n' retained "$path_end" user-content >"$malformed_file"
+      ;;
+    incomplete_completion)
+      printf '%s\n' retained "$completion_start" user-content >"$malformed_file"
+      ;;
+    duplicate)
+      printf '%s\n' "$path_start" old "$path_end" \
+        "$path_start" duplicate "$path_end" >"$malformed_file"
+      ;;
+    reversed)
+      printf '%s\n' "$path_end" retained "$path_start" >"$malformed_file"
+      ;;
+    nested)
+      printf '%s\n' "$path_start" "$path_start" retained \
+        "$path_end" "$path_end" >"$malformed_file"
+      ;;
+  esac
+  assert_malformed_markers_refused \
+    "$malformed_home" /bin/bash "$malformed_file"
+done
+
+malformed_zsh_home=$TEMP_ROOT/malformed-zsh
+mkdir -p "$malformed_zsh_home/dotfiles"
+malformed_zsh_target=$malformed_zsh_home/dotfiles/zprofile
+printf '%s\n' retained "$path_start" user-content >"$malformed_zsh_target"
+ln -s dotfiles/zprofile "$malformed_zsh_home/.zprofile"
+malformed_zsh_link=$(readlink "$malformed_zsh_home/.zprofile")
+assert_malformed_markers_refused \
+  "$malformed_zsh_home" /bin/zsh "$malformed_zsh_target"
+[[ -L $malformed_zsh_home/.zprofile ]]
+[[ $(readlink "$malformed_zsh_home/.zprofile") == "$malformed_zsh_link" ]]
+
+malformed_fish_home=$TEMP_ROOT/malformed-fish
+malformed_fish_file=$malformed_fish_home/.config/fish/conf.d/aws-metadata-agent.fish
+mkdir -p "$(dirname "$malformed_fish_file")"
+printf '%s\n' retained "$path_end" user-content >"$malformed_fish_file"
+assert_malformed_markers_refused \
+  "$malformed_fish_home" /opt/homebrew/bin/fish "$malformed_fish_file"
 
 unsupported_home=$TEMP_ROOT/unsupported
 mkdir -p "$unsupported_home"
