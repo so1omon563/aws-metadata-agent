@@ -99,6 +99,19 @@ assert_service_call() {
   fi
 }
 
+assert_invalid_status_json() {
+  local body=$1 output status=0
+
+  output=$(MOCK_CURL_STATUS=200 MOCK_CURL_BODY="$body" \
+    "$CLI" status --json) || status=$?
+  if [[ $status -ne 6 ]] ||
+     [[ $output != \
+       '{"state":"error","message":"AWS metadata service returned an invalid profile response."}' ]]; then
+    printf 'Unexpected invalid-profile status result: %s\n' "$output" >&2
+    exit 1
+  fi
+}
+
 MOCK_CURL_STATUS=200 MOCK_CURL_BODY='{"role_arn":"example-role"}' \
   assert_exit 0 "$CLI" profile test-profile --no-open
 
@@ -208,6 +221,28 @@ status_output=$(MOCK_CURL_STATUS=200 MOCK_CURL_PROFILE_NAME=personal \
 if [[ $status_output != \
   '{"state":"running","endpoint":"http://127.0.0.1:9876","profile_name":"personal","profile":{"role_arn":"different-role"}}' ]]; then
   printf 'Unexpected named-profile JSON status: %s\n' "$status_output" >&2
+  exit 1
+fi
+
+status_output=$(MOCK_CURL_STATUS=200 MOCK_CURL_PROFILE_NAME=personal \
+  MOCK_CURL_BODY=' { "role_arn" : "example-role", "auth_url" : "" } ' \
+  "$CLI" status --json)
+if [[ $status_output != \
+  '{"state":"running","endpoint":"http://127.0.0.1:9876","profile_name":"personal","profile": { "role_arn" : "example-role", "auth_url" : "" } }' ]]; then
+  printf 'Unexpected valid formatted profile status: %s\n' "$status_output" >&2
+  exit 1
+fi
+assert_invalid_status_json 'not-json'
+assert_invalid_status_json '"profile"'
+assert_invalid_status_json '["profile"]'
+assert_invalid_status_json '{"role_arn":}'
+empty_status=0
+empty_output=$(MOCK_CURL_STATUS=200 MOCK_CURL_BODY_EMPTY=true \
+  "$CLI" status --json) || empty_status=$?
+if [[ $empty_status -ne 6 ]] ||
+   [[ $empty_output != \
+     '{"state":"error","message":"AWS metadata service returned an invalid profile response."}' ]]; then
+  printf 'Unexpected empty-profile status result: %s\n' "$empty_output" >&2
   exit 1
 fi
 

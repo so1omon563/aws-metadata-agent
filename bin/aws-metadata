@@ -167,6 +167,15 @@ json_escape() {
   printf '%s' "$value"
 }
 
+is_profile_object() {
+  local value=$1 json_string json_ws profile_object
+
+  json_string='"([^"\\[:cntrl:]]|\\(["/\\bfnrt]|u[[:xdigit:]]{4}))*"'
+  json_ws=$'[ \t\r\n]*'
+  profile_object="^${json_ws}\\{${json_ws}(${json_string}${json_ws}:${json_ws}${json_string}(${json_ws},${json_ws}${json_string}${json_ws}:${json_ws}${json_string})*)?${json_ws}\\}${json_ws}$"
+  [[ $value =~ $profile_object ]]
+}
+
 print_result() {
   local json=$1
   local state=$2
@@ -522,6 +531,11 @@ status_command() (
 
   case $status in
     200)
+      if ! is_profile_object "$body"; then
+        print_result "$json" error \
+          'AWS metadata service returned an invalid profile response.'
+        return 6
+      fi
       profile_name_status=$(http_request \
         GET "$PROFILE_NAME_PATH" '' "$profile_name_file")
       if [[ $profile_name_status == 200 ]]; then

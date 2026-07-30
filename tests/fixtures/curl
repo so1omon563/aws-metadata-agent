@@ -85,7 +85,9 @@ if [[ -n $output_file ]]; then
   if [[ $profile_name_request == true ]]; then
     printf '%s' "$response_body" >"$output_file"
   elif [[ $method == GET ]]; then
-    if [[ -n $response_body ]]; then
+    if [[ ${MOCK_CURL_BODY_EMPTY:-false} == true ]]; then
+      : >"$output_file"
+    elif [[ -n $response_body ]]; then
       printf '%s' "$response_body" >"$output_file"
     else
       printf '%s' '{"name":"test-profile"}' >"$output_file"

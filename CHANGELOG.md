@@ -7,6 +7,8 @@ All notable changes to this project are documented here. Changes remain under
 
 ### Fixed
 
+- `aws-metadata status --json` now rejects invalid profile responses instead
+  of emitting malformed JSON.
 - `aws-metadata diagnose` now fails when the configured `aws-runas` executable
   cannot report its version.
 - User-mode setup and uninstall now preserve and remove managed AWS config
