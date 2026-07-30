@@ -7,6 +7,8 @@ All notable changes to this project are documented here. Changes remain under
 
 ### Fixed
 
+- `aws-metadata status --json` now rejects invalid profile responses instead
+  of emitting malformed JSON.
 - Decimal wait and persisted schema values now retain base-10 semantics when
   they contain leading zeroes.
 - Uninstall now preserves service definitions and state when a current launchd
