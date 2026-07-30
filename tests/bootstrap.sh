@@ -46,7 +46,7 @@ fish_completion_checksum=$( \
   hash_files "$PROJECT_DIR/completions/aws-runas.fish" | awk '{print $1}'
 )
 [[ $fish_completion_checksum == \
-  a87af302574932cd58a16f7554f10c445c699bbe96a8b3e04451f7741630547f ]]
+  d5f47b281d4adf3a3b533b9a27674cb2a9ce1d77ed28e22b4b498452ea628d97 ]]
 
 cat >"$fake_bin/curl" <<'EOF'
 #!/usr/bin/env bash
@@ -132,7 +132,7 @@ case ${file##*/} in
     checksum=ef28853bfd267e09f4eb3b2335581294ad12099daa4a27fe3290e76259f16dec
     ;;
   aws-runas.fish)
-    checksum=a87af302574932cd58a16f7554f10c445c699bbe96a8b3e04451f7741630547f
+    checksum=d5f47b281d4adf3a3b533b9a27674cb2a9ce1d77ed28e22b4b498452ea628d97
     ;;
   *)
     checksum=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -411,6 +411,8 @@ EOF
   fish_sentinel=$TEMP_ROOT/fish-completion-sentinel
   mkdir "$fish_sentinel"
   : >"$fish_sentinel/filesystem-candidate"
+  : >"$fish_sentinel/delegated-command"
+  : >"$fish_sentinel/delegated-argument"
   # shellcheck disable=SC2016 # Fish expands argv, not Bash.
   fish_candidates=$(env PATH="$fake_bin:$PATH" fish --no-config -c \
     'source $argv[1]; cd $argv[2]; complete -C "aws-runas "' \
@@ -418,6 +420,16 @@ EOF
   [[ $fish_candidates == *$'list\tShows IAM roles or MFA device configuration'* ]]
   [[ $fish_candidates == *'sandbox-profile'* ]]
   [[ $fish_candidates != *'filesystem-candidate'* ]]
+  # shellcheck disable=SC2016 # Fish expands argv, not Bash.
+  fish_command_candidates=$(fish --no-config -c \
+    'source $argv[1]; cd $argv[2]; complete -C "aws-runas -r sandbox-profile ./delegated-c"' \
+    "$PROJECT_DIR/completions/aws-runas.fish" "$fish_sentinel")
+  [[ $fish_command_candidates == *'./delegated-command'* ]]
+  # shellcheck disable=SC2016 # Fish expands argv, not Bash.
+  fish_argument_candidates=$(fish --no-config -c \
+    'source $argv[1]; cd $argv[2]; complete -C "aws-runas -r sandbox-profile ./delegated-command delegated-a"' \
+    "$PROJECT_DIR/completions/aws-runas.fish" "$fish_sentinel")
+  [[ $fish_argument_candidates == *'delegated-argument'* ]]
 fi
 
 unsupported_home=$TEMP_ROOT/unsupported
