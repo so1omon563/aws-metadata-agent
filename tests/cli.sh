@@ -567,7 +567,8 @@ if [[ $status_output != \
   exit 1
 fi
 
-REAL_CURL=$(PATH=/usr/local/bin:/usr/bin:/bin command -v curl)
+REAL_CURL=/usr/bin/curl
+[[ -x $REAL_CURL ]]
 real_curl_bin=$TEMP_ROOT/real-curl-bin
 real_curl_home=$TEMP_ROOT/real-curl-home
 real_curl_port=$TEMP_ROOT/real-curl-port
@@ -590,6 +591,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 server = HTTPServer(("127.0.0.1", 0), Handler)
+server.timeout = 5
 with open(sys.argv[1], "w", encoding="utf-8") as port_file:
     port_file.write(str(server.server_port))
 server.handle_request()
