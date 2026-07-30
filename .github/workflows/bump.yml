@@ -37,19 +37,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          text="$(git log -1 --pretty=%B | tr '[:upper:]' '[:lower:]')"
-          bump=
-          count=0
-          for candidate in patch minor major; do
-            if grep -qF "#${candidate}" <<<"$text"; then
-              bump="$candidate"
-              count=$((count + 1))
-            fi
-          done
-          if [ "$count" -ne 1 ]; then
-            echo "Release PR title must contain exactly one semver marker." >&2
-            exit 1
-          fi
+          text="$(git log -1 --pretty=%B)"
+          bump="$(./scripts/release_markers.sh "$text")"
           echo "bump=$bump" >>"$GITHUB_OUTPUT"
 
       - name: Validate staged release metadata
