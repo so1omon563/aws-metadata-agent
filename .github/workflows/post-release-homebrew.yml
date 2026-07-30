@@ -52,13 +52,25 @@ jobs:
           if [ -n "$REQUESTED_TAG" ]; then
             tag="$REQUESTED_TAG"
           else
-            tag="$(gh release list --limit 1 --json tagName --jq '.[0].tagName // ""')"
+            tag="$(gh release list \
+              --exclude-drafts --exclude-pre-releases --limit 1 \
+              --json tagName --jq '.[0].tagName // ""')"
           fi
           if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Release tag must look like vX.Y.Z: $tag" >&2
             exit 1
           fi
-          gh release view "$tag" --json tagName --jq '.tagName' >/dev/null
+          read -r release_tag is_draft is_prerelease < <(
+            gh release view "$tag" \
+              --json tagName,isDraft,isPrerelease \
+              --jq '[.tagName, .isDraft, .isPrerelease] | @tsv'
+          )
+          latest_stable_tag="$(gh release list \
+            --exclude-drafts --exclude-pre-releases --limit 1 \
+            --json tagName --jq '.[0].tagName // ""')"
+          scripts/check_homebrew_release.sh \
+            "$tag" "$release_tag" "$is_draft" "$is_prerelease" \
+            "$latest_stable_tag"
 
           if [ -n "$WORKFLOW_HEAD_SHA" ]; then
             git fetch --force origin "refs/tags/$tag:refs/tags/$tag"
