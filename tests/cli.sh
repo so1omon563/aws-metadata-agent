@@ -571,7 +571,7 @@ REAL_CURL=/usr/bin/curl
 [[ -x $REAL_CURL ]]
 real_curl_bin=$TEMP_ROOT/real-curl-bin
 real_curl_home=$TEMP_ROOT/real-curl-home
-real_curl_port=$TEMP_ROOT/real-curl-port
+real_curl_port=$((20000 + $$ % 20000))
 mkdir -p "$real_curl_bin" "$real_curl_home"
 ln -s "$REAL_CURL" "$real_curl_bin/curl"
 printf '%s\n' fail-with-body >"$real_curl_home/.curlrc"
@@ -590,18 +590,13 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
-server = HTTPServer(("127.0.0.1", 0), Handler)
+server = HTTPServer(("127.0.0.1", int(sys.argv[1])), Handler)
 server.timeout = 5
-with open(sys.argv[1], "w", encoding="utf-8") as port_file:
-    port_file.write(str(server.server_port))
 server.handle_request()
 PY
 real_curl_server=$!
-for _ in {1..50}; do
-  [[ -s $real_curl_port ]] && break
-  sleep 0.1
-done
-if [[ ! -s $real_curl_port ]]; then
+sleep 1
+if ! kill -0 "$real_curl_server" 2>/dev/null; then
   wait "$real_curl_server" || true
   printf '%s\n' 'Real-curl HTTP fixture did not start.' >&2
   exit 1
@@ -609,7 +604,7 @@ fi
 real_curl_output=$(env \
   CURL_HOME="$real_curl_home" \
   PATH="$real_curl_bin:/usr/bin:/bin" \
-  AWS_METADATA_URL="http://127.0.0.1:$(<"$real_curl_port")" \
+  AWS_METADATA_URL="http://127.0.0.1:$real_curl_port" \
   AWS_METADATA_VERSION_FILE="$PROJECT_DIR/VERSION" \
   "$CLI" status --json)
 wait "$real_curl_server"
