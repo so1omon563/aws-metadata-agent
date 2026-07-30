@@ -112,13 +112,15 @@ checksum_after=$(shasum -a 256 "$unmarked")
   fail 'cleanup changed unmarked CRLF configuration'
 
 created_default=$TEMP_ROOT/aws/created-default
-printf '%s\n' '# existing comment' >"$created_default"
+printf '%s\r\n' '# existing comment' >"$created_default"
 "$CONFIG_HELPER" add "$created_default" "$command_path"
-printf '%s\n' 'region = us-west-2' >>"$created_default"
+awk '{ if (sub(/\r$/, "") != 1) exit 1 }' "$created_default" ||
+  fail 'setup mixed line endings while adding a default CRLF profile'
+printf '%s\r\n' 'region = us-west-2' >>"$created_default"
 "$CONFIG_HELPER" remove "$created_default"
-grep -Fqx '[default]' "$created_default" ||
+grep -Fqx $'[default]\r' "$created_default" ||
   fail 'cleanup removed a default profile with user settings'
-grep -Fqx 'region = us-west-2' "$created_default" ||
+grep -Fqx $'region = us-west-2\r' "$created_default" ||
   fail 'cleanup removed a user-added default setting'
 
 conflict=$TEMP_ROOT/aws/conflict
