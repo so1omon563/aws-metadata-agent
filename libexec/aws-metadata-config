@@ -16,7 +16,16 @@ marker_count() {
   local marker=$1
   local file=$2
 
-  grep -Fxc "$marker" "$file" 2>/dev/null || true
+  command awk -v marker="$marker" '
+    {
+      line = $0
+      sub(/\r$/, "", line)
+      if (line == marker) {
+        count++
+      }
+    }
+    END { print count + 0 }
+  ' "$file"
 }
 
 replace_contents() {
@@ -46,12 +55,15 @@ replace_contents() {
 write_block() {
   local output=$1
   local command_path=$2
+  local line_ending=${3:-lf}
 
-  {
-    printf '%s\n' "$BEGIN_MARKER"
-    printf 'credential_process = "%s" _credential-process\n' "$command_path"
-    printf '%s\n' "$END_MARKER"
-  } >"$output"
+  if [[ $line_ending == crlf ]]; then
+    printf '%s\r\ncredential_process = "%s" _credential-process\r\n%s\r\n' \
+      "$BEGIN_MARKER" "$command_path" "$END_MARKER" >"$output"
+  else
+    printf '%s\ncredential_process = "%s" _credential-process\n%s\n' \
+      "$BEGIN_MARKER" "$command_path" "$END_MARKER" >"$output"
+  fi
 }
 
 insert_block() {
@@ -84,14 +96,18 @@ remove_block() {
   local output=$2
 
   command awk -v begin="$BEGIN_MARKER" -v end="$END_MARKER" '
-    $0 == begin {
+    {
+      line = $0
+      sub(/\r$/, "", line)
+    }
+    line == begin {
       if (skipping) {
         exit 2
       }
       skipping = 1
       next
     }
-    $0 == end {
+    line == end {
       if (!skipping) {
         exit 2
       }
@@ -112,9 +128,13 @@ extract_block() {
   local output=$2
 
   command awk -v begin="$BEGIN_MARKER" -v end="$END_MARKER" '
-    $0 == begin { copying = 1 }
+    {
+      line = $0
+      sub(/\r$/, "", line)
+    }
+    line == begin { copying = 1 }
     copying { print }
-    $0 == end { copying = 0 }
+    line == end { copying = 0 }
   ' "$input" >"$output"
 }
 
@@ -266,7 +286,14 @@ if [[ $command_name == validate || $command_name == add ]]; then
     fail 'COMMAND must be an executable absolute path' 2
   fi
 
-  write_block "$block_file" "$command_path"
+  block_line_ending=lf
+  if [[ -s $config_path ]]; then
+    IFS= read -r first_line <"$config_path" || true
+    if [[ $first_line == *$'\r' ]]; then
+      block_line_ending=crlf
+    fi
+  fi
+  write_block "$block_file" "$command_path" "$block_line_ending"
   if [[ $block_state == owned ]]; then
     extract_block "$config_path" "$temp_dir/current-block"
     if command cmp -s "$temp_dir/current-block" "$block_file"; then

@@ -7,6 +7,8 @@ All notable changes to this project are documented here. Changes remain under
 
 ### Fixed
 
+- User-mode setup and uninstall now preserve and remove managed AWS config
+  blocks after CRLF line-ending conversion.
 - Release automation now accepts only standalone bump and publication markers
   before invoking the tagging action.
 - Release checks now require the current tagged version's dated changelog
