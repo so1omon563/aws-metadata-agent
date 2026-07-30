@@ -9,6 +9,8 @@ All notable changes to this project are documented here. Changes remain under
 
 - Shell setup now refuses malformed managed markers instead of risking removal
   of user startup-file content.
+- Manual Homebrew publication retries now reject non-latest, draft, prerelease,
+  and formula-downgrade releases before updating the tap.
 
 ## [0.4.2] - 2026-07-30
 
