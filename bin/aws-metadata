@@ -170,7 +170,7 @@ json_escape() {
 is_profile_object() {
   local value=$1 json_string json_ws profile_object
 
-  json_string='"([^"\\[:cntrl:]]|\\(["/\\bfnrt]|u[[:xdigit:]]{4}))*"'
+  json_string='"([^"\\[:cntrl:]]|\\(["/\\bfnrt]|u([0-9A-Ca-cE-Fa-f][[:xdigit:]]{3}|[dD][0-7][[:xdigit:]]{2}|[dD][89AaBb][[:xdigit:]]{2}\\u[dD][CcDdEeFf][[:xdigit:]]{2})))*"'
   json_ws=$'[ \t\r\n]*'
   profile_object="^${json_ws}\\{${json_ws}(${json_string}${json_ws}:${json_ws}${json_string}(${json_ws},${json_ws}${json_string}${json_ws}:${json_ws}${json_string})*)?${json_ws}\\}${json_ws}$"
   printf '%s' "$value" | command iconv -f UTF-8 -t UTF-8 >/dev/null 2>&1 &&

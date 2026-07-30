@@ -244,10 +244,10 @@ if [[ $status_output != \
 fi
 
 status_output=$(MOCK_CURL_STATUS=200 MOCK_CURL_PROFILE_NAME=personal \
-  MOCK_CURL_BODY=' { "role_arn" : "example-role", "auth_url" : "" } ' \
+  MOCK_CURL_BODY=' { "role_arn" : "example-role", "emoji" : "\uD83D\uDE00" } ' \
   "$CLI" status --json)
 if [[ $status_output != \
-  '{"state":"running","endpoint":"http://127.0.0.1:9876","profile_name":"personal","profile": { "role_arn" : "example-role", "auth_url" : "" } }' ]]; then
+  '{"state":"running","endpoint":"http://127.0.0.1:9876","profile_name":"personal","profile": { "role_arn" : "example-role", "emoji" : "\uD83D\uDE00" } }' ]]; then
   printf 'Unexpected valid formatted profile status: %s\n' "$status_output" >&2
   exit 1
 fi
@@ -255,6 +255,8 @@ assert_invalid_status_json 'not-json'
 assert_invalid_status_json '"profile"'
 assert_invalid_status_json '["profile"]'
 assert_invalid_status_json '{"role_arn":}'
+assert_invalid_status_json '{"role_arn":"\uD800"}'
+assert_invalid_status_json '{"role_arn":"\uDC00"}'
 LC_ALL=C assert_invalid_status_json $'{"role_arn":"example-\200"}'
 empty_status=0
 empty_output=$(MOCK_CURL_STATUS=200 MOCK_CURL_BODY_EMPTY=true \
