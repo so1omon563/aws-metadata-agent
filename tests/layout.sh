@@ -139,6 +139,10 @@ assert_contains \
 # shellcheck disable=SC2016
 assert_contains \
   "$PROJECT_DIR/install.sh" \
+  'prior_config_version=$((10#$prior_config_version))'
+# shellcheck disable=SC2016
+assert_contains \
+  "$PROJECT_DIR/install.sh" \
   'if ((prior_config_version > CONFIG_SCHEMA_VERSION)); then'
 # shellcheck disable=SC2016
 assert_contains \
