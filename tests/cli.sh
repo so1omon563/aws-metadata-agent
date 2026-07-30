@@ -592,7 +592,8 @@ class Handler(BaseHTTPRequestHandler):
 
 server = HTTPServer(("127.0.0.1", int(sys.argv[1])), Handler)
 server.timeout = 5
-server.handle_request()
+for _ in range(2):
+    server.handle_request()
 PY
 real_curl_server=$!
 sleep 1
