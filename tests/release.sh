@@ -104,6 +104,39 @@ printf '%s\n' 'Examples: ./install-release.sh --version X.Y.Z' \
 git -C "$repo" add VERSION CHANGELOG.md README.md docs/direct-install.md install-release.sh
 git -C "$repo" commit -qm release
 git -C "$repo" tag v0.2.1
+python3 "$repo/scripts/check_release.py" --root "$repo" >/dev/null
+
+python3 - "$repo" <<'PY'
+import subprocess
+import sys
+from pathlib import Path
+
+repo = Path(sys.argv[1])
+changelog = repo / "CHANGELOG.md"
+valid = changelog.read_text()
+header = "## [0.2.1] - 2026-07-17\n"
+link = (
+    "[0.2.1]: "
+    "https://github.com/so1omon563/aws-metadata-agent/compare/v0.2.0...v0.2.1"
+)
+cases = {
+    "missing section": valid.replace(header, "", 1),
+    "duplicate section": valid.replace(header, header + header, 1),
+    "missing link": valid.replace(link, "", 1),
+    "wrong link": valid.replace(link, link.replace("v0.2.0", "v0.1.0"), 1),
+}
+for name, content in cases.items():
+    changelog.write_text(content)
+    result = subprocess.run(
+        [sys.executable, repo / "scripts/check_release.py", "--root", repo],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        raise SystemExit(f"Release checks accepted released metadata with {name}.")
+changelog.write_text(valid)
+PY
+
 AWS_METADATA_RELEASE_DIST_DIR="$TEMP_ROOT/dist" \
   "$repo/scripts/build_release_assets.sh" v0.2.1 >/dev/null
 (

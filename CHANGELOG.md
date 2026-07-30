@@ -7,6 +7,8 @@ All notable changes to this project are documented here. Changes remain under
 
 ### Fixed
 
+- Release checks now require the current tagged version's dated changelog
+  section and comparison link.
 - Shell setup now refuses malformed managed markers instead of risking removal
   of user startup-file content.
 
