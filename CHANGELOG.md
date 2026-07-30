@@ -7,6 +7,8 @@ All notable changes to this project are documented here. Changes remain under
 
 ### Fixed
 
+- `aws-metadata refresh` now works without options on Apple-provided Bash 3.2
+  instead of failing while expanding an empty argument array.
 - Homebrew now gives user-mode setup stable `opt` paths for its LaunchAgent and
   default `credential_process`, so routine formula upgrades no longer leave
   those integrations pointing at a removed versioned Cellar keg.
