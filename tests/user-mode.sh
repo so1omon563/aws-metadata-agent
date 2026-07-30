@@ -216,6 +216,12 @@ EOF
   cat >"$MOCK_BIN/launchctl" <<'EOF'
 #!/bin/sh
 printf 'launchctl %s\n' "$*" >>"${MOCK_SERVICE_LOG:?}"
+state_file=${MOCK_SERVICE_LOG}.launch-state
+case $1 in
+  bootstrap) : >"$state_file" ;;
+  bootout) rm -f "$state_file" ;;
+  print) [ -e "$state_file" ] || exit 113 ;;
+esac
 EOF
   cat >"$MOCK_BIN/curl" <<'EOF'
 #!/bin/sh

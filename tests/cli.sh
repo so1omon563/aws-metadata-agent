@@ -22,8 +22,10 @@ readonly CLEAR_STDERR="$TEMP_ROOT/clear-stderr"
 readonly TRANSIENT_SAML_STS_TIMEOUT='failed to refresh cached credentials, operation error STS: AssumeRoleWithSAML, https response error StatusCode: 408, RequestID: , api error UnknownError: UnknownError'
 readonly SERVICE_MOCKS="$TEMP_ROOT/service-mocks"
 readonly SERVICE_CALL_LOG="$TEMP_ROOT/service-calls"
+readonly WAIT_MOCKS="$TEMP_ROOT/wait-mocks"
+readonly WAIT_CLOCK="$TEMP_ROOT/wait-clock"
 
-mkdir -p "$SERVICE_MOCKS"
+mkdir -p "$SERVICE_MOCKS" "$WAIT_MOCKS"
 cat >"$SERVICE_MOCKS/uname" <<'EOF'
 #!/usr/bin/env bash
 set -eu
@@ -47,6 +49,23 @@ exit "${MOCK_SERVICE_EXIT:-0}"
 EOF
 chmod +x "$SERVICE_MOCKS/uname" "$SERVICE_MOCKS/launchctl" \
   "$SERVICE_MOCKS/systemctl"
+cat >"$WAIT_MOCKS/date" <<'EOF'
+#!/usr/bin/env bash
+set -eu
+count=$(cat "${MOCK_WAIT_CLOCK:?}")
+count=$((count + 1))
+printf '%s\n' "$count" >"$MOCK_WAIT_CLOCK"
+if ((count < 3)); then
+  printf '%s\n' 100
+else
+  printf '%s\n' 108
+fi
+EOF
+cat >"$WAIT_MOCKS/sleep" <<'EOF'
+#!/usr/bin/env bash
+:
+EOF
+chmod +x "$WAIT_MOCKS/date" "$WAIT_MOCKS/sleep"
 
 assert_exit() {
   local expected=$1
@@ -490,9 +509,34 @@ MOCK_CURL_STATUS=200 assert_request_timeout \
 MOCK_CURL_STATUS=200 assert_request_timeout \
   47 "$CLI" profile test-profile --open --wait 42
 MOCK_CURL_STATUS=200 assert_request_timeout \
+  15 "$CLI" profile test-profile --open --wait 010
+MOCK_CURL_STATUS=200 assert_request_timeout \
+  13 "$CLI" use test-profile --wait 08
+MOCK_CURL_STATUS=200 assert_request_timeout \
   15 "$CLI" use test-profile --wait 0
 AWS_METADATA_REQUEST_TIMEOUT=75 MOCK_CURL_STATUS=200 assert_request_timeout \
   75 "$CLI" use test-profile
+AWS_METADATA_WAIT_SECONDS=invalid assert_exit 2 "$CLI" use test-profile
+AWS_METADATA_WAIT_SECONDS=-1 assert_exit 2 \
+  "$CLI" profile test-profile --open
+
+# Leading-zero waits remain decimal and terminate under repeated HTTP 401s.
+printf '%s\n' 0 >"$WAIT_CLOCK"
+printf '401|\n401|\n' >"$CURL_RESPONSE_QUEUE"
+PATH="$WAIT_MOCKS:$PATH" MOCK_WAIT_CLOCK="$WAIT_CLOCK" \
+  MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
+  assert_exit 5 "$CLI" use test-profile --wait 08
+
+# Refresh forwards the normalized wait into the shared profile-selection path.
+: >"$CURL_MAX_TIME_LOG"
+printf '200|{}\n200|\n200|success\n200|\n' >"$CURL_RESPONSE_QUEUE"
+MOCK_CURL_MAX_TIME_LOG="$CURL_MAX_TIME_LOG" \
+  MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
+  "$CLI" refresh --open --wait 010 >/dev/null
+if [[ $(tail -n 1 "$CURL_MAX_TIME_LOG") != 15 ]]; then
+  printf '%s\n' 'Refresh did not normalize its forwarded wait as decimal.' >&2
+  exit 1
+fi
 
 # Simulate a profile endpoint that needs longer than the normal 15-second
 # automation timeout. Interactive selection must keep the request alive for

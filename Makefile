@@ -12,6 +12,7 @@ test:
 	./tests/layout.sh
 	./tests/installer-readiness.sh
 	./tests/user-mode.sh
+	./tests/uninstall.sh
 	./tests/release-installer.sh
 	./tests/release.sh
 	./tests/pr-check-wait.sh
@@ -22,6 +23,7 @@ test:
 			install-release.sh install.sh uninstall.sh tests/syntax.sh tests/cli.sh \
 			tests/bootstrap.sh tests/container-runtime-linux.sh tests/layout.sh \
 			tests/installer-readiness.sh tests/user-mode.sh \
+			tests/uninstall.sh \
 			tests/release-installer.sh tests/release.sh \
 			tests/pr-check-wait.sh tests/fixtures/curl tests/fixtures/gh-pr-check \
 			tests/fixtures/journalctl \
