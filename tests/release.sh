@@ -56,6 +56,8 @@ git -C "$repo" config user.email test@example.invalid
 git -C "$repo" add .
 git -C "$repo" commit -qm initial
 git -C "$repo" tag v0.2.0
+PYTHONDONTWRITEBYTECODE=1 \
+  python3 "$repo/scripts/check_release.py" --root "$repo" >/dev/null
 
 python3 "$repo/scripts/stage_release.py" \
   --root "$repo" --bump patch --date 2026-07-17 --no-fetch >/dev/null

@@ -47,16 +47,14 @@ def validate_version_neutral_references(root: Path) -> None:
                 )
 
 
-def previous_tag_version(root: Path, version: Version) -> Version:
+def previous_tag_version(root: Path, version: Version) -> Version | None:
     completed = run_git(root, ["tag", "--list", "v[0-9]*"], capture=True)
     previous = [
         parsed
         for tag in completed.stdout.splitlines()
         if (parsed := Version.parse_tag(tag.strip())) is not None and parsed < version
     ]
-    if not previous:
-        raise ReleaseStageError(f"no semantic-version tag precedes v{version}")
-    return max(previous)
+    return max(previous) if previous else None
 
 
 def validate_links(
@@ -71,11 +69,18 @@ def validate_links(
         raise ReleaseStageError(f"Unreleased comparison must start at v{version}")
 
     previous = latest if version != latest else previous_tag_version(root, version)
-    release_link = (
-        f"[{version}]: "
-        "https://github.com/so1omon563/aws-metadata-agent/compare/"
-        f"v{previous}...v{version}"
-    )
+    if previous is None:
+        release_link = (
+            f"[{version}]: "
+            "https://github.com/so1omon563/aws-metadata-agent/releases/tag/"
+            f"v{version}"
+        )
+    else:
+        release_link = (
+            f"[{version}]: "
+            "https://github.com/so1omon563/aws-metadata-agent/compare/"
+            f"v{previous}...v{version}"
+        )
     if release_link not in text:
         raise ReleaseStageError(f"missing comparison link for {version}")
 
