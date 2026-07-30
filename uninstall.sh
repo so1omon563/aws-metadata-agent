@@ -20,6 +20,66 @@ credential provider. Upstream aws-runas caches are kept.
 EOF
 }
 
+stop_launchd_job() {
+  local job=$1
+  local status=0
+
+  launchctl print "$job" >/dev/null 2>&1 || status=$?
+  case $status in
+    0) ;;
+    113) return 0 ;;
+    *)
+      printf 'Unable to inspect launchd job %s.\n' "$job" >&2
+      return 1
+      ;;
+  esac
+
+  if ! launchctl bootout "$job" >/dev/null 2>&1; then
+    printf 'Unable to stop launchd job %s.\n' "$job" >&2
+    return 1
+  fi
+
+  status=0
+  launchctl print "$job" >/dev/null 2>&1 || status=$?
+  if [[ $status -ne 113 ]]; then
+    printf 'Launchd job %s remains active.\n' "$job" >&2
+    return 1
+  fi
+}
+
+stop_systemd_unit() {
+  local unit=$1
+  local active_state load_state
+  shift
+
+  if ! load_state=$(
+    "$@" show --property=LoadState --value "$unit" 2>/dev/null
+  ); then
+    printf 'Unable to inspect systemd unit %s.\n' "$unit" >&2
+    return 1
+  fi
+  [[ $load_state != not-found ]] || return 0
+
+  if ! "$@" disable --now "$unit" >/dev/null 2>&1; then
+    printf 'Unable to stop systemd unit %s.\n' "$unit" >&2
+    return 1
+  fi
+
+  if ! active_state=$(
+    "$@" show --property=ActiveState --value "$unit" 2>/dev/null
+  ); then
+    printf 'Unable to verify systemd unit %s stopped.\n' "$unit" >&2
+    return 1
+  fi
+  case $active_state in
+    inactive|failed) ;;
+    *)
+      printf 'Systemd unit %s remains active.\n' "$unit" >&2
+      return 1
+      ;;
+  esac
+}
+
 uninstall_user_mode() {
   local target_home=${HOME:-}
   local target_uid state_dir marker_file agent_file aws_config
@@ -44,12 +104,16 @@ uninstall_user_mode() {
     return 0
   fi
 
-  launchctl bootout "gui/$target_uid/$BROKER_LABEL" >/dev/null 2>&1 || true
+  stop_launchd_job "gui/$target_uid/$BROKER_LABEL"
   "$PROJECT_DIR/libexec/aws-metadata-config" remove "$aws_config"
   rm -f "$agent_file"
   rm -rf "$state_dir"
   printf '%s\n' 'aws-metadata-agent user mode uninstalled.'
 }
+
+if [[ ${BASH_SOURCE[0]} != "$0" ]]; then
+  return 0
+fi
 
 while (($#)); do
   case $1 in
@@ -126,17 +190,15 @@ fi
 case $(uname -s) in
   Darwin)
     if [[ -n ${AWS_METADATA_UID:-} ]]; then
-      launchctl bootout \
-        "gui/$AWS_METADATA_UID/com.github.so1omon563.aws-metadata-agent.broker" \
-        >/dev/null 2>&1 || true
+      stop_launchd_job \
+        "gui/$AWS_METADATA_UID/com.github.so1omon563.aws-metadata-agent.broker"
       launchctl bootout \
         "gui/$AWS_METADATA_UID/com.github.aws-metadata-agent.broker" \
         >/dev/null 2>&1 || true
     fi
-    launchctl bootout system/com.github.so1omon563.aws-metadata-agent.forwarder \
-      >/dev/null 2>&1 || true
-    launchctl bootout system/com.github.so1omon563.aws-metadata-agent.proxy \
-      >/dev/null 2>&1 || true
+    stop_launchd_job \
+      system/com.github.so1omon563.aws-metadata-agent.forwarder
+    stop_launchd_job system/com.github.so1omon563.aws-metadata-agent.proxy
     launchctl bootout system/com.github.aws-metadata-agent.forwarder \
       >/dev/null 2>&1 || true
     launchctl bootout system/com.github.aws-metadata-agent.proxy \
@@ -163,12 +225,13 @@ case $(uname -s) in
     ;;
   Linux)
     if [[ -n ${AWS_METADATA_UID:-} && -n ${AWS_METADATA_USER:-} ]]; then
-      sudo -u "$AWS_METADATA_USER" env XDG_RUNTIME_DIR="/run/user/$AWS_METADATA_UID" \
-        systemctl --user disable --now aws-metadata-agent.service \
-        >/dev/null 2>&1 || true
+      stop_systemd_unit aws-metadata-agent.service \
+        sudo -u "$AWS_METADATA_USER" \
+        env XDG_RUNTIME_DIR="/run/user/$AWS_METADATA_UID" systemctl --user
     fi
-    systemctl disable --now aws-metadata-agent.socket \
-      aws-metadata-agent-address.service >/dev/null 2>&1 || true
+    stop_systemd_unit aws-metadata-agent.socket systemctl
+    stop_systemd_unit aws-metadata-agent.service systemctl
+    stop_systemd_unit aws-metadata-agent-address.service systemctl
     rm -f /etc/systemd/system/aws-metadata-agent.service
     rm -f /etc/systemd/system/aws-metadata-agent.socket
     rm -f /etc/systemd/system/aws-metadata-agent-address.service
