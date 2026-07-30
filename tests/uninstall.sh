@@ -47,17 +47,24 @@ while [[ ${1:-} == --* ]]; do
   shift
 done
 case ${1:-} in
-  is-active)
-    case $(<"${MOCK_SYSTEMD_STATE:?}") in
-      active) exit 0 ;;
-      inactive) exit 3 ;;
-      absent) exit 4 ;;
-      error) exit 42 ;;
+  show)
+    state=$(<"${MOCK_SYSTEMD_STATE:?}")
+    [[ $state != error ]] || exit 42
+    case ${2:-} in
+      --property=LoadState)
+        [[ $state != absent ]] && printf '%s\n' loaded ||
+          printf '%s\n' not-found
+        ;;
+      --property=ActiveState)
+        printf '%s\n' "$state"
+        ;;
+      *) exit 2 ;;
     esac
     ;;
   disable)
     [[ ${MOCK_STOP_FAIL:-no} != yes ]] || exit 42
-    printf '%s\n' inactive >"${MOCK_SYSTEMD_STATE:?}"
+    [[ ${MOCK_REMAINS_ACTIVE:-no} == yes ]] ||
+      printf '%s\n' inactive >"${MOCK_SYSTEMD_STATE:?}"
     ;;
   *) exit 2 ;;
 esac
@@ -95,6 +102,7 @@ if MOCK_SERVICE_LOG=$service_log MOCK_LAUNCH_STATE=active MOCK_STOP_FAIL=yes \
 fi
 
 printf '%s\n' absent >"$systemd_state"
+: >"$service_log"
 for unit in \
   aws-metadata-agent.service \
   aws-metadata-agent.socket \
@@ -102,6 +110,12 @@ for unit in \
   MOCK_SERVICE_LOG=$service_log MOCK_SYSTEMD_STATE=$systemd_state \
     stop_systemd_unit "$unit" systemctl
 done
+stop_systemd_unit aws-metadata-agent.service \
+  env MOCK_SCOPE=user MOCK_SERVICE_LOG="$service_log" \
+    MOCK_SYSTEMD_STATE="$systemd_state" systemctl --user
+if grep -Fq 'disable --now' "$service_log"; then
+  fail 'partial uninstall tried to disable a confirmed missing unit'
+fi
 
 printf '%s\n' active >"$systemd_state"
 if stop_systemd_unit aws-metadata-agent.service \
@@ -121,6 +135,13 @@ for unit in \
     fail "systemd stop failure was ignored for $unit"
   fi
 done
+
+printf '%s\n' active >"$systemd_state"
+if MOCK_SERVICE_LOG=$service_log MOCK_SYSTEMD_STATE=$systemd_state \
+  MOCK_REMAINS_ACTIVE=yes \
+  stop_systemd_unit aws-metadata-agent.socket systemctl >/dev/null 2>&1; then
+  fail 'systemd post-stop active state was ignored'
+fi
 
 printf '%s\n' active >"$systemd_state"
 MOCK_SERVICE_LOG=$service_log MOCK_SYSTEMD_STATE=$systemd_state \

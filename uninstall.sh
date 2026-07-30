@@ -49,30 +49,35 @@ stop_launchd_job() {
 
 stop_systemd_unit() {
   local unit=$1
-  local status=0
+  local active_state load_state
   shift
 
-  "$@" is-active --quiet "$unit" >/dev/null 2>&1 || status=$?
-  case $status in
-    0|3) ;;
-    4) return 0 ;;
-    *)
-      printf 'Unable to inspect systemd unit %s.\n' "$unit" >&2
-      return 1
-      ;;
-  esac
+  if ! load_state=$(
+    "$@" show --property=LoadState --value "$unit" 2>/dev/null
+  ); then
+    printf 'Unable to inspect systemd unit %s.\n' "$unit" >&2
+    return 1
+  fi
+  [[ $load_state != not-found ]] || return 0
 
   if ! "$@" disable --now "$unit" >/dev/null 2>&1; then
     printf 'Unable to stop systemd unit %s.\n' "$unit" >&2
     return 1
   fi
 
-  status=0
-  "$@" is-active --quiet "$unit" >/dev/null 2>&1 || status=$?
-  if [[ $status -ne 3 && $status -ne 4 ]]; then
-    printf 'Systemd unit %s remains active.\n' "$unit" >&2
+  if ! active_state=$(
+    "$@" show --property=ActiveState --value "$unit" 2>/dev/null
+  ); then
+    printf 'Unable to verify systemd unit %s stopped.\n' "$unit" >&2
     return 1
   fi
+  case $active_state in
+    inactive|failed) ;;
+    *)
+      printf 'Systemd unit %s remains active.\n' "$unit" >&2
+      return 1
+      ;;
+  esac
 }
 
 uninstall_user_mode() {
