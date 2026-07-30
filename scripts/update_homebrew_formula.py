@@ -22,6 +22,15 @@ def update_formula(
     checksum = checksum_fields[0]
 
     text = path.read_text(encoding="utf-8")
+    current_match = re.search(
+        r'assert_equal "(\d+\.\d+\.\d+)\\n", shell_output', text
+    )
+    if current_match and tuple(map(int, version.split("."))) < tuple(
+        map(int, current_match.group(1).split("."))
+    ):
+        raise ValueError(
+            f"refusing to downgrade formula from {current_match.group(1)} to {version}"
+        )
     text, url_count = re.subn(
         r'(?m)^  url "[^"]+"$', f'  url "{archive_url}"', text, count=1
     )

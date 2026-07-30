@@ -11,6 +11,8 @@ All notable changes to this project are documented here. Changes remain under
   of user startup-file content.
 - Metadata requests now ignore user curl startup files so local curl preferences
   cannot change the CLI's protocol handling.
+- Manual Homebrew publication retries now reject non-latest, draft, prerelease,
+  and formula-downgrade releases before updating the tap.
 
 ## [0.4.2] - 2026-07-30
 
