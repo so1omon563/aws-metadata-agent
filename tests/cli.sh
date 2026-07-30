@@ -571,45 +571,44 @@ REAL_CURL=/usr/bin/curl
 [[ -x $REAL_CURL ]]
 real_curl_bin=$TEMP_ROOT/real-curl-bin
 real_curl_home=$TEMP_ROOT/real-curl-home
-real_curl_port=$((20000 + $$ % 20000))
+real_curl_port_file=$TEMP_ROOT/real-curl-port
 mkdir -p "$real_curl_bin" "$real_curl_home"
 ln -s "$REAL_CURL" "$real_curl_bin/curl"
 printf '%s\n' fail-with-body >"$real_curl_home/.curlrc"
-python3 - "$real_curl_port" <<'PY' &
+python3 - "$real_curl_port_file" <<'PY' &
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import sys
 
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        self.send_response(200 if self.path == "/ready" else 500)
+        self.send_response(500)
         self.end_headers()
-        if self.path != "/ready":
-            self.wfile.write(b"profile not set")
+        self.wfile.write(b"profile not set")
 
     def log_message(self, format, *args):
         pass
 
 
-server = HTTPServer(("127.0.0.1", int(sys.argv[1])), Handler)
+server = HTTPServer(("127.0.0.1", 0), Handler)
+with open(sys.argv[1], "w") as port_file:
+    print(server.server_port, file=port_file, flush=True)
 server.serve_forever()
 PY
 real_curl_server=$!
-real_curl_ready=false
-for _ in {1..20}; do
-  if "$REAL_CURL" --disable --silent --noproxy '*' --max-time 1 \
-    --output /dev/null "http://127.0.0.1:$real_curl_port/ready"; then
-    real_curl_ready=true
+for _ in {1..50}; do
+  if [[ -s $real_curl_port_file ]]; then
     break
   fi
   sleep 0.1
 done
-if [[ $real_curl_ready != true ]]; then
+if [[ ! -s $real_curl_port_file ]]; then
   kill "$real_curl_server" 2>/dev/null || true
   wait "$real_curl_server" 2>/dev/null || true
   printf '%s\n' 'Real-curl HTTP fixture did not start.' >&2
   exit 1
 fi
+real_curl_port=$(<"$real_curl_port_file")
 real_curl_status=0
 real_curl_output=$(env \
   CURL_HOME="$real_curl_home" \
