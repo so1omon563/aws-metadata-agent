@@ -76,6 +76,7 @@ assert_rejected 200 '{}'
 assert_rejected 200 '{"role_arn":}'
 assert_rejected 200 '{"auth_url":""}'
 assert_rejected 200 $'{"role_arn":"\\q"}'
+assert_rejected 200 $'{"role_arn":"bad\nvalue"}'
 assert_rejected 200 'unrelated listener'
 assert_rejected 404 'not found'
 grep -Fqx 'noproxy=*' "$MOCK_CURL_LOG" ||

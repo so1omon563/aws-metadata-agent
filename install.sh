@@ -125,7 +125,7 @@ launchctl_bootstrap_with_retry() {
 wait_for_metadata_endpoint() {
   local endpoint=$1 body_file status body json_string profile_object profile_role
 
-  json_string='"([^"\\]|\\(["/\\bfnrt]|u[[:xdigit:]]{4}))*"'
+  json_string='"([^"\\[:cntrl:]]|\\(["/\\bfnrt]|u[[:xdigit:]]{4}))*"'
   profile_object="^\\{${json_string}:${json_string}(,${json_string}:${json_string})*\\}$"
   profile_role="(^\\{|,)\"role_arn\":${json_string}(,|\\}$)"
 
