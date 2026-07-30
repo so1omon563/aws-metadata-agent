@@ -88,6 +88,29 @@ checksum_after=$(shasum -a 256 "$config_target")
 [[ $checksum_after == "$checksum_before" ]] ||
   fail 'repeated cleanup changed a CRLF AWS config'
 
+malformed=$TEMP_ROOT/aws/malformed-crlf
+printf '%s\r\n' \
+  '# aws-metadata-agent user mode: begin' \
+  'credential_process = user-owned' >"$malformed"
+checksum_before=$(shasum -a 256 "$malformed")
+if "$CONFIG_HELPER" remove "$malformed" >/dev/null 2>&1; then
+  fail 'cleanup accepted a malformed CRLF managed block'
+fi
+checksum_after=$(shasum -a 256 "$malformed")
+[[ $checksum_after == "$checksum_before" ]] ||
+  fail 'cleanup changed a malformed CRLF managed block'
+
+unmarked=$TEMP_ROOT/aws/unmarked-crlf
+printf '%s\r\n' \
+  '# aws-metadata-agent user mode: begin user-owned' \
+  'credential_process = user-owned' \
+  '# aws-metadata-agent user mode: end user-owned' >"$unmarked"
+checksum_before=$(shasum -a 256 "$unmarked")
+"$CONFIG_HELPER" remove "$unmarked"
+checksum_after=$(shasum -a 256 "$unmarked")
+[[ $checksum_after == "$checksum_before" ]] ||
+  fail 'cleanup changed unmarked CRLF configuration'
+
 created_default=$TEMP_ROOT/aws/created-default
 printf '%s\n' '# existing comment' >"$created_default"
 "$CONFIG_HELPER" add "$created_default" "$command_path"
