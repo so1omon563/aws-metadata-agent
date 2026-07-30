@@ -7,6 +7,8 @@ All notable changes to this project are documented here. Changes remain under
 
 ### Fixed
 
+- Release automation now accepts only standalone bump and publication markers
+  before invoking the tagging action.
 - Release checks now require the current tagged version's dated changelog
   section and comparison link.
 - Homebrew formula updates now drop stale revisions when the upstream version
