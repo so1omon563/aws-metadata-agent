@@ -164,7 +164,7 @@ review_fish_completion() {
 
   case $version in
     3.9.0)
-      expected_checksum=e130bc795ccc2d54e11070ec965523a2b6d24a527c36bb0ae192f8d6e3d23db2
+      expected_checksum=7a3f1d200e206b413a9053b62abeaa9dd083ad25e9b1aa665586fd6b27f0a83c
       ;;
     *)
       printf 'No reviewed native fish completion is recorded for aws-runas %s.\n' \
