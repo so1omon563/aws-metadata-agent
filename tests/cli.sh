@@ -594,9 +594,18 @@ server = HTTPServer(("127.0.0.1", int(sys.argv[1])), Handler)
 server.serve_forever()
 PY
 real_curl_server=$!
-sleep 1
-if ! kill -0 "$real_curl_server" 2>/dev/null; then
-  wait "$real_curl_server" || true
+real_curl_ready=false
+for _ in {1..20}; do
+  if "$REAL_CURL" --disable --silent --noproxy '*' --max-time 1 \
+    --output /dev/null "http://127.0.0.1:$real_curl_port/profile"; then
+    real_curl_ready=true
+    break
+  fi
+  sleep 0.1
+done
+if [[ $real_curl_ready != true ]]; then
+  kill "$real_curl_server" 2>/dev/null || true
+  wait "$real_curl_server" 2>/dev/null || true
   printf '%s\n' 'Real-curl HTTP fixture did not start.' >&2
   exit 1
 fi
