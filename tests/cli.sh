@@ -582,9 +582,10 @@ import sys
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        self.send_response(500)
+        self.send_response(200 if self.path == "/ready" else 500)
         self.end_headers()
-        self.wfile.write(b"profile not set")
+        if self.path != "/ready":
+            self.wfile.write(b"profile not set")
 
     def log_message(self, format, *args):
         pass
@@ -597,7 +598,7 @@ real_curl_server=$!
 real_curl_ready=false
 for _ in {1..20}; do
   if "$REAL_CURL" --disable --silent --noproxy '*' --max-time 1 \
-    --output /dev/null "http://127.0.0.1:$real_curl_port/profile"; then
+    --output /dev/null "http://127.0.0.1:$real_curl_port/ready"; then
     real_curl_ready=true
     break
   fi
