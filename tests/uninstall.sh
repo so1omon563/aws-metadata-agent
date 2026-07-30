@@ -68,7 +68,7 @@ printf '%s\n' Darwin
 EOF
 cat >"$MOCK_BIN/id" <<'EOF'
 #!/bin/sh
-[[ ${1:-} == -u ]] || exit 2
+test "${1:-}" = -u || exit 2
 printf '%s\n' 501
 EOF
 chmod +x "$MOCK_BIN"/*
