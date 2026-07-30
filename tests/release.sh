@@ -129,8 +129,9 @@ second_checksum=$(cut -d ' ' -f 1 \
 formula="$TEMP_ROOT/aws-metadata-agent.rb"
 cat >"$formula" <<'EOF'
 class AwsMetadataAgent < Formula
-  url "https://example.invalid/v0.2.0.tar.gz"
+  url "https://github.com/so1omon563/aws-metadata-agent/releases/download/v0.2.0/aws-metadata-agent-v0.2.0.tar.gz"
   sha256 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  revision 1
 
   test do
     assert_equal "0.2.0\n", shell_output("#{bin}/aws-metadata version")
@@ -144,6 +145,22 @@ python3 "$repo/scripts/update_homebrew_formula.py" \
 grep -Fq "url \"$archive_url\"" "$formula"
 grep -Fq "sha256 \"$second_checksum\"" "$formula"
 grep -Fq 'assert_equal "0.2.1\n"' "$formula"
+if grep -Fq 'revision 1' "$formula"; then
+  printf '%s\n' 'Formula update retained a revision from the prior version.' >&2
+  exit 1
+fi
+
+sed -i.bak '/sha256/a\
+  revision 1
+' "$formula"
+rm "$formula.bak"
+python3 "$repo/scripts/update_homebrew_formula.py" \
+  "$formula" 0.2.1 "$archive_url" \
+  "$TEMP_ROOT/dist/aws-metadata-agent-v0.2.1.tar.gz.sha256"
+grep -Fq "url \"$archive_url\"" "$formula"
+grep -Fq "sha256 \"$second_checksum\"" "$formula"
+grep -Fq 'assert_equal "0.2.1\n"' "$formula"
+grep -Fq 'revision 1' "$formula"
 
 release_check="$PROJECT_DIR/scripts/check_homebrew_release.sh"
 "$release_check" v0.2.1 v0.2.1 false false v0.2.1

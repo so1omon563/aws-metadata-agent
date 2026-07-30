@@ -9,6 +9,8 @@ All notable changes to this project are documented here. Changes remain under
 
 - Release automation now accepts only standalone bump and publication markers
   before invoking the tagging action.
+- Homebrew formula updates now drop stale revisions when the upstream version
+  changes while preserving revisions during same-version retries.
 - Shell setup now refuses malformed managed markers instead of risking removal
   of user startup-file content.
 - Manual Homebrew publication retries now reject non-latest, draft, prerelease,
