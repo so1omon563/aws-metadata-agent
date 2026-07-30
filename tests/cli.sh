@@ -594,6 +594,28 @@ if [[ $("$CLI" --version) != "$version_output" ]]; then
 fi
 assert_exit 2 "$CLI" version unexpected
 
+DIAGNOSE_HOME=$TEMP_ROOT/diagnose-home
+DIAGNOSE_STATE="$DIAGNOSE_HOME/Library/Application Support/aws-metadata-agent"
+mkdir -p "$DIAGNOSE_STATE"
+printf '%s\n' user >"$DIAGNOSE_STATE/user-mode"
+printf '%s\n' /usr/bin/false >"$DIAGNOSE_STATE/aws-runas-path"
+: >"$SERVICE_CALL_LOG"
+diagnose_status=0
+diagnose_output=$(HOME="$DIAGNOSE_HOME" \
+  PATH="$SERVICE_MOCKS:$PATH" MOCK_UNAME_S=Darwin \
+  MOCK_SERVICE_CALL_LOG="$SERVICE_CALL_LOG" MOCK_CURL_STATUS=200 \
+  MOCK_CURL_BODY='{"role_arn":"example-role"}' \
+  "$CLI" diagnose 2>&1) || diagnose_status=$?
+if [[ $diagnose_status -ne 1 ||
+      $diagnose_output != *'  version check failed'* ||
+      $diagnose_output != *'Metadata HTTP API: reachable'* ||
+      $diagnose_output != *'Link-local address: not used in user mode'* ||
+      $diagnose_output != *'User broker service: loaded'* ]]; then
+  printf 'Unexpected failed aws-runas diagnostic: %s\n' \
+    "$diagnose_output" >&2
+  exit 1
+fi
+
 setup_help=$(AWS_METADATA_PACKAGE_ROOT="$PROJECT_DIR" "$CLI" setup --help)
 if [[ $setup_help != *'--no-install-cli'* ]]; then
   printf '%s\n' 'Packaged setup help did not expose the installer contract.' >&2

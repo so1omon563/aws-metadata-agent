@@ -7,6 +7,8 @@ All notable changes to this project are documented here. Changes remain under
 
 ### Fixed
 
+- `aws-metadata diagnose` now fails when the configured `aws-runas` executable
+  cannot report its version.
 - Release automation now accepts only standalone bump and publication markers
   before invoking the tagging action.
 - Release checks now require the current tagged version's dated changelog
