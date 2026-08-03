@@ -111,10 +111,13 @@ profile_status() {
 
 auto_clear_guard() {
   local broker_pid=$1 active_since=0 seconds=0 deadline=0 published_deadline=0
-  local now state
-  # ponytail: five-second polling avoids a second proxy; intercept requests only
-  # if sub-second deadline enforcement becomes necessary.
+  local last_inactive_at now remaining sleep_seconds state
   local poll_seconds=${AWS_METADATA_AUTO_CLEAR_POLL_SECONDS:-5}
+  [[ $poll_seconds =~ ^[1-9][0-9]*$ ]] || poll_seconds=5
+  last_inactive_at=$(date +%s)
+
+  # ponytail: polling avoids a second proxy. Dating activation from the last
+  # inactive observation may clear up to one poll early, but never one poll late.
 
   while kill -0 "$broker_pid" 2>/dev/null; do
     if ! seconds=$(read_auto_clear_seconds); then
@@ -122,6 +125,7 @@ auto_clear_guard() {
       active_since=0
       deadline=0
       published_deadline=0
+      last_inactive_at=$(date +%s)
       remove_auto_clear_deadline
       sleep "$poll_seconds"
       continue
@@ -145,7 +149,7 @@ auto_clear_guard() {
     case $state in
       active)
         if ((active_since == 0)); then
-          active_since=$now
+          active_since=$last_inactive_at
           deadline=$((active_since + seconds))
           write_auto_clear_deadline "$deadline" || true
           published_deadline=$deadline
@@ -155,10 +159,17 @@ auto_clear_guard() {
         active_since=0
         deadline=0
         published_deadline=0
+        last_inactive_at=$now
         remove_auto_clear_deadline
         ;;
     esac
-    sleep "$poll_seconds"
+    sleep_seconds=$poll_seconds
+    if ((active_since > 0)); then
+      remaining=$((deadline - $(date +%s)))
+      ((remaining > 0)) || continue
+      ((remaining < sleep_seconds)) && sleep_seconds=$remaining
+    fi
+    sleep "$sleep_seconds"
   done
   remove_auto_clear_deadline
 }

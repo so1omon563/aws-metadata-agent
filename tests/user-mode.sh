@@ -216,7 +216,7 @@ sed "s|AWS_RUNAS=.*|AWS_RUNAS=$auto_clear_runas|" \
   "$TEMP_ROOT/system-server-config" >"$TEMP_ROOT/auto-clear-server-config"
 
 printf '%s\n' inactive >"$auto_clear_state"
-printf '%s\n' 1 >"$auto_clear_config"
+printf '%s\n' 2 >"$auto_clear_config"
 (
   status=0
   PATH="$auto_clear_bin:$PATH" \
@@ -224,7 +224,7 @@ printf '%s\n' 1 >"$auto_clear_config"
     AUTO_CLEAR_STATE="$auto_clear_state" \
     AWS_METADATA_AUTO_CLEAR_FILE="$auto_clear_config" \
     AWS_METADATA_AUTO_CLEAR_DEADLINE_FILE="$auto_clear_deadline" \
-    AWS_METADATA_AUTO_CLEAR_POLL_SECONDS=0.1 \
+    AWS_METADATA_AUTO_CLEAR_POLL_SECONDS=1 \
     AWS_METADATA_CONFIG="$TEMP_ROOT/auto-clear-server-config" \
     "$PROJECT_DIR/libexec/aws-metadata-server" || status=$?
   exit "$status"
@@ -264,7 +264,7 @@ PATH="$auto_clear_bin:$PATH" \
   AUTO_CLEAR_STATE="$auto_clear_state" \
   AWS_METADATA_AUTO_CLEAR_FILE="$auto_clear_config" \
   AWS_METADATA_AUTO_CLEAR_DEADLINE_FILE="$auto_clear_deadline" \
-  AWS_METADATA_AUTO_CLEAR_POLL_SECONDS=0.1 \
+  AWS_METADATA_AUTO_CLEAR_POLL_SECONDS=1 \
   AWS_METADATA_CONFIG="$TEMP_ROOT/auto-clear-server-config" \
   "$PROJECT_DIR/libexec/aws-metadata-server" &
 server_pid=$!
