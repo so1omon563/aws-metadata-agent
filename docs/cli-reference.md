@@ -147,8 +147,9 @@ manager restarts it in healthy no-profile state while leaving system-mode
 networking available. Because the guard polls `/profile` every five seconds,
 it conservatively dates activation from the last confirmed inactive
 observation. Delayed or unavailable observations can make auto-clear occur
-early, potentially by more than one polling interval, but they do not extend
-the configured maximum window.
+early, potentially by more than one polling interval. A status request already
+in progress at the deadline can delay enforcement until that request completes
+and the guard loops again.
 
 Auto-clear prevents new metadata requests from receiving the active identity.
 It cannot revoke temporary credentials already cached by a CLI, SDK, IDE, or
