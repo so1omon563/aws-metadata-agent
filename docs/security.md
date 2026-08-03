@@ -69,6 +69,12 @@ revocation boundary: applications may retain already-issued STS credentials
 until expiration, and any local caller with endpoint access can select a
 profile again.
 
+Optional `aws-metadata auto-clear DURATION` reduces the time a forgotten
+selection remains available to new metadata requests. The window covers every
+selection path and is not extended by profile changes or credential traffic.
+It is disabled by default, stores no profile identity, and has the same
+non-revocation boundary as an explicit clear.
+
 ## Privilege boundary
 
 macOS user mode has no privileged layer. Its LaunchAgent, installer state,

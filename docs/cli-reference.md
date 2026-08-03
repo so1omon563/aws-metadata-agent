@@ -10,6 +10,7 @@ upstream `aws-runas` broker. Normal profile changes do not require `sudo`.
 | `use PROFILE` | A human is selecting an upstream profile. | Opens the browser when required and waits 300 seconds by default. |
 | `profile PROFILE` | Automation is selecting a profile. | Does not open a browser or wait by default; use explicit flags. |
 | `clear` | Stop the broker from vending the selected profile to new metadata requests. | Restarts only the user broker when needed and verifies healthy no-profile state. |
+| `auto-clear DURATION\|off\|status` | Bound how long a profile may remain continuously active. | Disabled by default; accepts seconds or an `s`, `m`, `h`, or `d` suffix. |
 | `active-profile` | Show the selected profile in a shell prompt or status bar. | Prints only the exact live profile name; stays silent when there is nothing to display. |
 | `status` | Check endpoint and active-profile state. | `profile: null` or “No profile is selected” is healthy after startup. |
 | `open` | Open the upstream browser interface. | Opens the endpoint for the installed mode; it does not select a profile. |
@@ -68,7 +69,8 @@ human must opt into both `--open` and a bounded `--wait`.
 | 5 | `timeout` | The configured interactive authentication wait expired. |
 | 6 | `error` | The endpoint answered, but the broker returned an unexpected response. |
 
-JSON output contains stable state, message, and profile fields. Unexpected
+Successful JSON output also reports the current `auto_clear` configuration.
+Unexpected
 broker responses also include a redacted broker classification, the
 `aws-metadata errors` command, and the platform log location. Profile names can
 still be sensitive even when credential values are absent.
@@ -103,7 +105,7 @@ aws-metadata status --json
 Expected healthy no-profile JSON is:
 
 ```json
-{"state":"running","endpoint":"http://169.254.169.254","profile_name":null,"profile":null}
+{"state":"running","endpoint":"http://169.254.169.254","profile_name":null,"profile":null,"auto_clear":{"enabled":false,"duration_seconds":null,"remaining_seconds":null}}
 ```
 
 When a profile is active, status reads the user-defined upstream profile name
@@ -111,7 +113,7 @@ from the standard IMDS role-name path and preserves the live details returned
 by the upstream `/profile` endpoint:
 
 ```json
-{"state":"running","endpoint":"http://169.254.169.254","profile_name":"example-nonprod","profile":{"auth_url":"","client_id":"","external_id":"","jump_role":"","redirect_uri":"","role_arn":"","username":""}}
+{"state":"running","endpoint":"http://169.254.169.254","profile_name":"example-nonprod","profile":{"auth_url":"","client_id":"","external_id":"","jump_role":"","redirect_uri":"","role_arn":"","username":""},"auto_clear":{"enabled":true,"duration_seconds":3600,"remaining_seconds":2841}}
 ```
 
 No profile name or detail object is persisted by the agent. If the live
@@ -119,6 +121,36 @@ role-name request is unavailable, `profile_name` is `null` while the available
 profile details remain visible. The `profile` object can include role or
 authentication URLs. Do not treat status output as safe to paste into a public
 issue.
+
+## Automatically clear continuous exposure
+
+```sh
+aws-metadata auto-clear 1h
+aws-metadata auto-clear status
+aws-metadata auto-clear off
+```
+
+`auto-clear` stores only a normalized duration and the current deadline in the
+developer account. It does not store a profile name or profile details. Values
+may be plain seconds or use an `s`, `m`, `h`, or `d` suffix; the maximum is 365
+days.
+
+When enabled, the broker guard starts one maximum continuous exposure window
+when `/profile` changes from healthy no-profile state to active. Selections
+through the CLI, browser interface, HTTP API, and integrations therefore share
+the same timer. Changing profiles and ordinary credential requests do not
+extend it. Clearing the profile ends the window; the next selection starts a
+new one.
+
+At the deadline the guard stops the unprivileged broker. The native service
+manager restarts it in healthy no-profile state while leaving system-mode
+networking available. Enforcement can occur up to five seconds after the
+reported deadline.
+
+Auto-clear prevents new metadata requests from receiving the active identity.
+It cannot revoke temporary credentials already cached by a CLI, SDK, IDE, or
+other consumer. Use AWS-side least privilege and session controls for that
+separate boundary.
 
 ## Clear the active profile
 

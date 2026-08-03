@@ -90,7 +90,7 @@ Common root-owned state:
 
 | Path | Purpose |
 | --- | --- |
-| `/usr/local/libexec/aws-metadata-agent/aws-metadata-server` | Validates the developer uid and starts the upstream broker. |
+| `/usr/local/libexec/aws-metadata-agent/aws-metadata-server` | Validates the developer uid, supervises the upstream broker, and enforces optional auto-clear. |
 | `/usr/local/libexec/aws-metadata-agent/aws-runas` | Protected copy of the selected upstream executable; executes as the developer. |
 | `/usr/local/libexec/aws-metadata-agent/aws-metadata-forwarder` | macOS link-local and socket setup. |
 | `/usr/local/libexec/aws-metadata-agent/aws-metadata-network` | Linux link-local address setup and cleanup. |
@@ -137,8 +137,9 @@ state during uninstall when the project originally changed it.
 
 1. The developer LaunchAgent starts the root-owned server wrapper in the GUI
    domain.
-2. The wrapper rejects an unexpected effective uid, then executes the protected
-   `aws-runas` copy as an unprivileged EC2 broker on `127.0.0.1:18080`.
+2. The wrapper rejects an unexpected effective uid, then starts the protected
+   `aws-runas` copy as an unprivileged EC2 broker on `127.0.0.1:18080` and
+   watches its active/no-profile state for optional auto-clear.
 3. The root LaunchDaemon creates the `/32` loopback alias when absent.
 4. The forwarder loads the launchd socket definition for
    `169.254.169.254:80`.
@@ -224,6 +225,10 @@ documentation is authoritative for upstream protocol behavior.
   `profile: null`.
 - Native managers restart failed broker processes, but active profile selection
   is in-process state and returns to empty after broker restart.
+- When configured, the unprivileged auto-clear guard records only an activation
+  deadline. It stops the broker after the maximum continuous active window so
+  the native manager restarts it without a selected profile. Unexpected endpoint
+  responses do not reset an established deadline.
 - `aws-metadata clear` uses that state boundary intentionally: it restarts only
   the developer's broker, waits through the transient forwarding failure, and
   verifies `/profile` reports no selection. The privileged address, socket, and
@@ -247,10 +252,10 @@ immediate switch requires signing out of the Toolkit and selecting `default`
 or `local-metadata` again; refreshing its Explorer does not invalidate that
 cache.
 
-The project does not currently implement acquire/release, ownership, TTL,
-advisory locking, or enforced isolation. A future cooperative lease design is
-tracked separately; it cannot prevent direct HTTP clients from changing the
-profile unless all selection is mediated by an enforcing controller.
+The optional auto-clear window limits continuous exposure but does not
+implement acquire/release, ownership, advisory locking, or per-consumer
+isolation. It watches the shared broker directly, so direct HTTP selection does
+not bypass the timer.
 
 ## State lifecycle
 
@@ -260,6 +265,7 @@ profile unless all selection is mediated by an enforcing controller.
 | Link-local address and forwarding | Recreated | Recreated | Removed |
 | User AWS configuration | Retained | Retained | Preserved |
 | Upstream credential and browser caches | Retained, subject to expiration | Retained, subject to provider policy | Preserved |
+| Auto-clear preference | Retained | Retained | Removed |
 | Active profile | Cleared | Cleared | Not applicable |
 
 An explicit `aws-metadata clear` has the same effect on active-profile process

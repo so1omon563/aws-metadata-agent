@@ -97,6 +97,7 @@ consumer before claiming compatibility.
 | User-owned AWS configuration | Retained | Retained | Project-owned user-mode provider removed |
 | Upstream role credential cache | Subject to expiration | Subject to expiration | Preserved |
 | Upstream browser session state | Provider-controlled | Provider-controlled | Preserved |
+| Auto-clear preference | Retained | Retained | Removed |
 | Active agent profile | Cleared | Cleared | Not applicable |
 
 Native services return after logout or reboot, but the developer must select a
@@ -117,6 +118,14 @@ that it returns to healthy no-profile state. This prevents later metadata
 requests from receiving the previously active identity, but it cannot revoke
 temporary credentials that a consumer already fetched. Upstream credential
 and browser caches remain available for a later explicit selection.
+
+Optional `aws-metadata auto-clear DURATION` bounds how long the broker may
+remain continuously active. Its deadline begins at the no-profile-to-active
+transition and is not extended by profile changes or credential requests. At
+expiry the same broker restart returns the endpoint to no-profile state.
+Auto-clear persists only its duration and deadline, never a profile name or
+detail object, and remains subject to the same non-revocation boundary as an
+explicit clear.
 
 ## Next steps
 

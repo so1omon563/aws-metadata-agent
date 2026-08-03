@@ -54,6 +54,8 @@ not a per-application credential-isolation system.
   affects every host application and container using the endpoint.
 - The active selection is process state. Native services return after logout
   or reboot, but the profile must be selected again after the broker restarts.
+- Automatic clearing is disabled by default. Enable a maximum continuous
+  exposure window with `aws-metadata auto-clear DURATION`.
 - Any process or container that can reach the configured metadata endpoint may
   be able to obtain credentials for the active profile or request a profile
   change.
@@ -127,6 +129,8 @@ After installation, select a configured upstream profile:
 ```sh
 aws-metadata status
 aws-metadata diagnose
+# Optionally clear any continuously active profile after one hour:
+aws-metadata auto-clear 1h
 aws-metadata use example-nonprod
 # Print only the live name for shell-prompt integrations:
 aws-metadata active-profile
