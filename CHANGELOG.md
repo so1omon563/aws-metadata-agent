@@ -5,6 +5,12 @@ All notable changes to this project are documented here. Changes remain under
 
 ## [Unreleased]
 
+### Added
+
+- Optional broker-wide auto-clear now bounds continuous active-profile
+  exposure across CLI, browser, HTTP, and integration selections without
+  persisting profile identity or claiming revocation of cached credentials.
+
 ## [0.4.3] - 2026-07-30
 
 ### Fixed

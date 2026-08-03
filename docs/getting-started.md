@@ -119,6 +119,7 @@ Before the first selection, expected status is:
 ```text
 AWS metadata service is running at http://127.0.0.1:18080.
 No profile is selected.
+Auto-clear: off.
 ```
 
 No profile is a healthy startup state. In system mode the endpoint is
@@ -137,6 +138,17 @@ The direct user-mode URL is `http://127.0.0.1:18080/`; system mode uses
 
 ## 4. Select the profile
 
+Before selecting a sensitive identity, optionally configure a maximum
+continuous exposure window:
+
+```sh
+aws-metadata auto-clear 1h
+```
+
+Auto-clear is off by default. Its timer begins when the broker first observes
+an active profile; profile changes and ordinary credential requests do not
+extend that window.
+
 Use the human-oriented command:
 
 ```sh
@@ -148,6 +160,8 @@ by default. Success reports:
 
 ```text
 AWS metadata profile set to example-nonprod.
+The global metadata credential endpoint is active.
+Auto-clear: off.
 ```
 
 Use `--wait 600` when password recovery or MFA may take longer. For unattended
