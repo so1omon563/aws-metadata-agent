@@ -144,8 +144,10 @@ new one.
 
 At the deadline the guard stops the unprivileged broker. The native service
 manager restarts it in healthy no-profile state while leaving system-mode
-networking available. Enforcement can occur up to five seconds after the
-reported deadline.
+networking available. Because the guard polls `/profile` every five seconds,
+it dates activation from the last confirmed inactive observation. Auto-clear
+may therefore occur up to one polling interval early, but delayed observation
+does not extend the configured maximum window.
 
 Auto-clear prevents new metadata requests from receiving the active identity.
 It cannot revoke temporary credentials already cached by a CLI, SDK, IDE, or
