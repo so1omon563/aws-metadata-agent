@@ -14,6 +14,8 @@ export AWS_METADATA_VERSION_FILE="$PROJECT_DIR/VERSION"
 TEMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/aws-metadata-cli.XXXXXX")
 readonly TEMP_ROOT
 trap 'rm -rf "$TEMP_ROOT"' EXIT
+export AWS_METADATA_AUTO_CLEAR_FILE="$TEMP_ROOT/auto-clear-seconds"
+export AWS_METADATA_AUTO_CLEAR_DEADLINE_FILE="$TEMP_ROOT/auto-clear-deadline"
 readonly CURL_MAX_TIME_LOG="$TEMP_ROOT/curl-max-time"
 readonly CURL_CALL_LOG="$TEMP_ROOT/curl-calls"
 readonly CURL_URL_LOG="$TEMP_ROOT/curl-urls"
@@ -134,10 +136,68 @@ assert_invalid_status_json() {
 MOCK_CURL_STATUS=200 MOCK_CURL_BODY='{"role_arn":"example-role"}' \
   assert_exit 0 "$CLI" profile test-profile --no-open
 
+auto_clear_output=$("$CLI" auto-clear status)
+[[ $auto_clear_output == 'Auto-clear: off.' ]] || {
+  printf 'Unexpected disabled auto-clear status: %s\n' "$auto_clear_output" >&2
+  exit 1
+}
+auto_clear_output=$("$CLI" auto-clear 1h)
+[[ $(<"$AWS_METADATA_AUTO_CLEAR_FILE") == 3600 ]] || {
+  printf '%s\n' 'Auto-clear did not persist normalized seconds.' >&2
+  exit 1
+}
+[[ $auto_clear_output == *'Auto-clear configured for 1h.'* ]] || {
+  printf 'Unexpected auto-clear configuration output: %s\n' \
+    "$auto_clear_output" >&2
+  exit 1
+}
+profile_output=$(MOCK_CURL_STATUS=200 MOCK_CURL_BODY='{"role_arn":"example-role"}' \
+  "$CLI" profile test-profile --no-open)
+[[ $profile_output == *'The global metadata credential endpoint is active.'* && \
+   $profile_output == *'Auto-clear: 1h maximum continuous window.'* ]] || {
+  printf 'Unexpected protected profile output: %s\n' "$profile_output" >&2
+  exit 1
+}
+profile_output=$(MOCK_CURL_STATUS=200 MOCK_CURL_BODY='{"role_arn":"example-role"}' \
+  "$CLI" profile test-profile --no-open --json)
+[[ $profile_output == \
+  '{"state":"ready","message":"AWS metadata profile set to test-profile.","profile":"test-profile","auto_clear":{"enabled":true,"duration_seconds":3600,"remaining_seconds":null}}' ]] || {
+  printf 'Unexpected protected profile JSON: %s\n' "$profile_output" >&2
+  exit 1
+}
+printf '%s\n' "$(( $(date +%s) + 1800 ))" \
+  >"$AWS_METADATA_AUTO_CLEAR_DEADLINE_FILE"
+auto_clear_output=$("$CLI" auto-clear status)
+[[ $auto_clear_output == *'1h configured;'* && \
+   $auto_clear_output == *'remaining.'* ]] || {
+  printf 'Unexpected active auto-clear status: %s\n' "$auto_clear_output" >&2
+  exit 1
+}
+printf '%s\n' "$(( $(date +%s) - 1 ))" \
+  >"$AWS_METADATA_AUTO_CLEAR_DEADLINE_FILE"
+auto_clear_output=$("$CLI" auto-clear status)
+[[ $auto_clear_output == *'0s remaining.'* ]] || {
+  printf 'Unexpected expired auto-clear status: %s\n' "$auto_clear_output" >&2
+  exit 1
+}
+assert_exit 2 "$CLI" auto-clear 0
+assert_exit 2 "$CLI" auto-clear forever
+assert_exit 2 "$CLI" auto-clear 366d
+"$CLI" auto-clear off >/dev/null
+[[ ! -e $AWS_METADATA_AUTO_CLEAR_FILE && \
+   ! -e $AWS_METADATA_AUTO_CLEAR_DEADLINE_FILE ]] || {
+  printf '%s\n' 'Disabling auto-clear retained state.' >&2
+  exit 1
+}
+printf '%s\n' invalid >"$AWS_METADATA_AUTO_CLEAR_FILE"
+assert_exit 6 "$CLI" auto-clear status
+rm -f "$AWS_METADATA_AUTO_CLEAR_FILE"
+
 status_output=$(MOCK_CURL_STATUS=200 MOCK_CURL_PROFILE_NAME=personal \
   MOCK_CURL_BODY='{"role_arn":"example-role"}' "$CLI" status)
 if [[ $status_output != *'Active profile: personal'* ]] ||
-   [[ $status_output != *'Profile details: {"role_arn":"example-role"}'* ]]; then
+   [[ $status_output != *'Profile details: {"role_arn":"example-role"}'* ]] ||
+   [[ $status_output != *'Auto-clear: off.'* ]]; then
   printf 'Unexpected named-profile status output: %s\n' "$status_output" >&2
   exit 1
 fi
@@ -238,7 +298,7 @@ assert_exit 2 "$CLI" active-profile unexpected
 status_output=$(MOCK_CURL_STATUS=200 MOCK_CURL_PROFILE_NAME=personal \
   MOCK_CURL_BODY='{"role_arn":"different-role"}' "$CLI" status --json)
 if [[ $status_output != \
-  '{"state":"running","endpoint":"http://127.0.0.1:9876","profile_name":"personal","profile":{"role_arn":"different-role"}}' ]]; then
+  '{"state":"running","endpoint":"http://127.0.0.1:9876","profile_name":"personal","profile":{"role_arn":"different-role"},"auto_clear":{"enabled":false,"duration_seconds":null,"remaining_seconds":null}}' ]]; then
   printf 'Unexpected named-profile JSON status: %s\n' "$status_output" >&2
   exit 1
 fi
@@ -247,7 +307,7 @@ status_output=$(MOCK_CURL_STATUS=200 MOCK_CURL_PROFILE_NAME=personal \
   MOCK_CURL_BODY=' { "role_arn" : "example-role", "emoji" : "\uD83D\uDE00" } ' \
   "$CLI" status --json)
 if [[ $status_output != \
-  '{"state":"running","endpoint":"http://127.0.0.1:9876","profile_name":"personal","profile": { "role_arn" : "example-role", "emoji" : "\uD83D\uDE00" } }' ]]; then
+  '{"state":"running","endpoint":"http://127.0.0.1:9876","profile_name":"personal","profile": { "role_arn" : "example-role", "emoji" : "\uD83D\uDE00" } ,"auto_clear":{"enabled":false,"duration_seconds":null,"remaining_seconds":null}}' ]]; then
   printf 'Unexpected valid formatted profile status: %s\n' "$status_output" >&2
   exit 1
 fi
@@ -271,7 +331,7 @@ fi
 status_output=$(MOCK_CURL_STATUS=200 MOCK_CURL_PROFILE_NAME_STATUS=000 \
   MOCK_CURL_BODY='{"role_arn":"example-role"}' "$CLI" status --json)
 if [[ $status_output != \
-  '{"state":"running","endpoint":"http://127.0.0.1:9876","profile_name":null,"profile":{"role_arn":"example-role"}}' ]]; then
+    '{"state":"running","endpoint":"http://127.0.0.1:9876","profile_name":null,"profile":{"role_arn":"example-role"},"auto_clear":{"enabled":false,"duration_seconds":null,"remaining_seconds":null}}' ]]; then
   printf 'Unexpected unavailable-name status output: %s\n' "$status_output" >&2
   exit 1
 fi
@@ -356,7 +416,7 @@ assert_exit 2 "$CLI" refresh --wait invalid
 
 status_output=$(MOCK_CURL_STATUS=200 "$CLI" status --json)
 if [[ $status_output != \
-  '{"state":"running","endpoint":"http://127.0.0.1:9876","profile_name":"test-profile","profile":{"name":"test-profile"}}' ]]; then
+  '{"state":"running","endpoint":"http://127.0.0.1:9876","profile_name":"test-profile","profile":{"name":"test-profile"},"auto_clear":{"enabled":false,"duration_seconds":null,"remaining_seconds":null}}' ]]; then
   printf 'Unexpected active-profile JSON status: %s\n' "$status_output" >&2
   exit 1
 fi
@@ -644,7 +704,7 @@ assert_curl_calls 1
 status_output=$(MOCK_CURL_STATUS=500 MOCK_CURL_BODY='profile not set' \
   "$CLI" status --json)
 if [[ $status_output != \
-  '{"state":"running","endpoint":"http://127.0.0.1:9876","profile_name":null,"profile":null}' ]]; then
+  '{"state":"running","endpoint":"http://127.0.0.1:9876","profile_name":null,"profile":null,"auto_clear":{"enabled":false,"duration_seconds":null,"remaining_seconds":null}}' ]]; then
   printf 'Unexpected empty-profile status output: %s\n' "$status_output" >&2
   exit 1
 fi

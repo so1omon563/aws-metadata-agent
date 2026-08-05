@@ -213,6 +213,10 @@ case $(uname -s) in
       rm -f \
         "$AWS_METADATA_HOME/Library/LaunchAgents/com.github.so1omon563.aws-metadata-agent.broker.plist"
       rm -f "$AWS_METADATA_HOME/Library/LaunchAgents/com.github.aws-metadata-agent.broker.plist"
+      rm -f \
+        "$AWS_METADATA_HOME/$USER_STATE_RELATIVE/auto-clear-seconds" \
+        "$AWS_METADATA_HOME/$USER_STATE_RELATIVE/auto-clear-seconds.deadline"
+      rmdir "$AWS_METADATA_HOME/$USER_STATE_RELATIVE" 2>/dev/null || true
     fi
     /sbin/pfctl -a com.apple/aws-metadata-agent -F all >/dev/null 2>&1 || true
     if [[ -r /var/run/aws-metadata-agent/pf-token ]]; then
@@ -237,6 +241,10 @@ case $(uname -s) in
     rm -f /etc/systemd/system/aws-metadata-agent-address.service
     if [[ -n ${AWS_METADATA_HOME:-} ]]; then
       rm -f "$AWS_METADATA_HOME/.config/systemd/user/aws-metadata-agent.service"
+      rm -f \
+        "$AWS_METADATA_HOME/.config/aws-metadata-agent/auto-clear-seconds" \
+        "$AWS_METADATA_HOME/.config/aws-metadata-agent/auto-clear-seconds.deadline"
+      rmdir "$AWS_METADATA_HOME/.config/aws-metadata-agent" 2>/dev/null || true
     fi
     systemctl daemon-reload
     if [[ ${AWS_METADATA_LINGER_WAS_ENABLED:-yes} == no && \

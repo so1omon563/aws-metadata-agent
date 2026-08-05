@@ -22,6 +22,145 @@ readonly PACKAGE_ROOT="${AWS_METADATA_PACKAGE_ROOT:-}"
 readonly PACKAGE_CLI="${AWS_METADATA_PACKAGE_CLI:-}"
 readonly PROFILE_NAME_PATH=/latest/meta-data/iam/security-credentials/
 readonly REFRESH_PATH=/refresh
+readonly MAX_AUTO_CLEAR_SECONDS=31536000
+
+auto_clear_config_file() {
+  if [[ -n ${AWS_METADATA_AUTO_CLEAR_FILE:-} ]]; then
+    printf '%s' "$AWS_METADATA_AUTO_CLEAR_FILE"
+    return
+  fi
+  case "$(uname -s)" in
+    Darwin)
+      printf '%s/Library/Application Support/aws-metadata-agent/auto-clear-seconds' \
+        "$HOME"
+      ;;
+    Linux)
+      printf '%s/.config/aws-metadata-agent/auto-clear-seconds' "$HOME"
+      ;;
+    *) printf '%s/.aws-metadata-agent-auto-clear-seconds' "$HOME" ;;
+  esac
+}
+
+auto_clear_deadline_file() {
+  if [[ -n ${AWS_METADATA_AUTO_CLEAR_DEADLINE_FILE:-} ]]; then
+    printf '%s' "$AWS_METADATA_AUTO_CLEAR_DEADLINE_FILE"
+    return
+  fi
+  printf '%s.deadline' "$(auto_clear_config_file)"
+}
+
+read_positive_seconds() {
+  local file=$1 value
+
+  [[ -r $file ]] || return 1
+  IFS= read -r value <"$file" || return 1
+  [[ $value =~ ^[1-9][0-9]*$ && ${#value} -le 8 ]] || return 1
+  value=$((10#$value))
+  ((value <= MAX_AUTO_CLEAR_SECONDS)) || return 1
+  printf '%s' "$value"
+}
+
+read_deadline_epoch() {
+  local file=$1 value
+
+  [[ -r $file ]] || return 1
+  IFS= read -r value <"$file" || return 1
+  [[ $value =~ ^[1-9][0-9]*$ && ${#value} -le 12 ]] || return 1
+  printf '%s' "$value"
+}
+
+configured_auto_clear_seconds() {
+  read_positive_seconds "$(auto_clear_config_file)" || printf '0'
+}
+
+auto_clear_status_values() {
+  local seconds deadline now remaining=-1
+
+  seconds=$(configured_auto_clear_seconds)
+  if ((seconds > 0)) && \
+     deadline=$(read_deadline_epoch "$(auto_clear_deadline_file)"); then
+    now=$(date +%s)
+    remaining=$((deadline - now))
+    ((remaining > 0)) || remaining=0
+  fi
+  printf '%s %s\n' "$seconds" "$remaining"
+}
+
+format_duration() {
+  local seconds=$1
+
+  if ((seconds == 0)); then
+    printf '0s'
+  elif ((seconds % 86400 == 0)); then
+    printf '%sd' "$((seconds / 86400))"
+  elif ((seconds % 3600 == 0)); then
+    printf '%sh' "$((seconds / 3600))"
+  elif ((seconds % 60 == 0)); then
+    printf '%sm' "$((seconds / 60))"
+  else
+    printf '%ss' "$seconds"
+  fi
+}
+
+print_auto_clear_status() {
+  local seconds remaining
+  read -r seconds remaining < <(auto_clear_status_values)
+
+  if ((seconds == 0)); then
+    printf '%s\n' 'Auto-clear: off.'
+  elif ((remaining >= 0)); then
+    printf 'Auto-clear: %s configured; %s remaining.\n' \
+      "$(format_duration "$seconds")" "$(format_duration "$remaining")"
+  else
+    printf 'Auto-clear: %s configured; waiting for an active profile.\n' \
+      "$(format_duration "$seconds")"
+  fi
+}
+
+print_auto_clear_configuration() {
+  local seconds
+  seconds=$(configured_auto_clear_seconds)
+  if ((seconds == 0)); then
+    printf '%s\n' 'Auto-clear: off.'
+  else
+    printf 'Auto-clear: %s maximum continuous window.\n' \
+      "$(format_duration "$seconds")"
+  fi
+}
+
+print_auto_clear_json() {
+  local seconds remaining
+  read -r seconds remaining < <(auto_clear_status_values)
+
+  if ((seconds == 0)); then
+    printf '%s' ',"auto_clear":{"enabled":false,"duration_seconds":null,"remaining_seconds":null}'
+  else
+    printf ',"auto_clear":{"enabled":true,"duration_seconds":%s,"remaining_seconds":' \
+      "$seconds"
+    if ((remaining >= 0)); then
+      printf '%s' "$remaining"
+    else
+      printf 'null'
+    fi
+    printf '}'
+  fi
+}
+
+print_ready_profile() {
+  local json=$1 profile=$2
+
+  if [[ $json == true ]]; then
+    printf '{"state":"ready","message":"%s","profile":"%s"' \
+      "$(json_escape "AWS metadata profile set to $profile.")" \
+      "$(json_escape "$profile")"
+    print_auto_clear_json
+    printf '}\n'
+  else
+    printf 'AWS metadata profile set to %s.\n' "$profile"
+    printf '%s\n' 'The global metadata credential endpoint is active.'
+    print_auto_clear_configuration
+  fi
+}
 
 usage() {
   cat <<'EOF'
@@ -29,6 +168,7 @@ Usage:
   aws-metadata use PROFILE [--open|--no-open] [--wait SECONDS] [--json]
   aws-metadata profile PROFILE [--open|--no-open] [--wait SECONDS] [--json]
   aws-metadata clear [--wait SECONDS] [--json]
+  aws-metadata auto-clear DURATION|off|status
   aws-metadata active-profile
   aws-metadata status [--json]
   aws-metadata open
@@ -54,6 +194,66 @@ Exit codes for refresh:
   5 authentication timeout  6 no active profile or refresh failure
 EOF
 }
+
+parse_duration() {
+  local duration=$1 number multiplier=1 suffix=''
+
+  case $duration in
+    *[smhd]) suffix=${duration: -1}; number=${duration%?} ;;
+    *) number=$duration ;;
+  esac
+  [[ $number =~ ^[1-9][0-9]*$ && ${#number} -le 8 ]] || return 1
+  number=$((10#$number))
+  case $suffix in
+    s|'') multiplier=1 ;;
+    m) multiplier=60 ;;
+    h) multiplier=3600 ;;
+    d) multiplier=86400 ;;
+  esac
+  ((number <= MAX_AUTO_CLEAR_SECONDS / multiplier)) || return 1
+  printf '%s' "$((number * multiplier))"
+}
+
+auto_clear_command() (
+  local action=${1:-} config_file deadline_file directory seconds temp_file
+
+  if (($# != 1)); then
+    printf '%s\n' 'Usage: aws-metadata auto-clear DURATION|off|status' >&2
+    return 2
+  fi
+  config_file=$(auto_clear_config_file)
+  deadline_file=$(auto_clear_deadline_file)
+  case $action in
+    status)
+      if [[ -e $config_file ]] && ! read_positive_seconds "$config_file" >/dev/null; then
+        printf 'Auto-clear configuration is invalid: %s\n' "$config_file" >&2
+        return 6
+      fi
+      print_auto_clear_status
+      ;;
+    off)
+      command rm -f "$config_file" "$deadline_file" || return 6
+      printf '%s\n' 'Auto-clear disabled.'
+      ;;
+    *)
+      seconds=$(parse_duration "$action") || {
+        printf '%s\n' \
+          'DURATION must be a positive number of seconds or use s, m, h, or d.' >&2
+        return 2
+      }
+      directory=${config_file%/*}
+      umask 077
+      command mkdir -p "$directory" || return 6
+      command chmod 0700 "$directory" || return 6
+      temp_file=$(mktemp "$directory/.auto-clear.XXXXXX") || return 6
+      trap 'rm -f "$temp_file"' EXIT
+      printf '%s\n' "$seconds" >"$temp_file" || return 6
+      command mv "$temp_file" "$config_file" || return 6
+      temp_file=''
+      printf 'Auto-clear configured for %s.\n' "$(format_duration "$seconds")"
+      ;;
+  esac
+)
 
 version_command() {
   if (($#)); then
@@ -432,7 +632,7 @@ profile_command() (
   fi
   case $status in
     200|204)
-      print_result "$json" ready "AWS metadata profile set to $profile." "$profile"
+      print_ready_profile "$json" "$profile"
       return 0
       ;;
     timeout)
@@ -484,7 +684,7 @@ profile_command() (
     fi
     case $status in
       200|204)
-        print_result "$json" ready "AWS metadata profile set to $profile." "$profile"
+        print_ready_profile "$json" "$profile"
         return 0
         ;;
       timeout)
@@ -557,21 +757,27 @@ status_command() (
         else
           printf 'null'
         fi
-        printf ',"profile":%s}\n' "${body:-null}"
+        printf ',"profile":%s' "${body:-null}"
+        print_auto_clear_json
+        printf '}\n'
       else
         printf 'AWS metadata service is running at %s.\n' "$BASE_URL"
         printf 'Active profile: %s\n' "${profile_name:-unknown}"
         printf 'Profile details: %s\n' "${body:-unknown}"
+        print_auto_clear_status
       fi
       ;;
     500)
       if [[ $body == 'profile not set' ]]; then
         if [[ $json == true ]]; then
-          printf '{"state":"running","endpoint":"%s","profile_name":null,"profile":null}\n' \
+          printf '{"state":"running","endpoint":"%s","profile_name":null,"profile":null' \
             "$(json_escape "$BASE_URL")"
+          print_auto_clear_json
+          printf '}\n'
         else
           printf 'AWS metadata service is running at %s.\n' "$BASE_URL"
           printf '%s\n' 'No profile is selected.'
+          print_auto_clear_status
         fi
       else
         print_result "$json" error \
@@ -1088,6 +1294,7 @@ main() {
     use) profile_command interactive "$@" ;;
     profile) profile_command automation "$@" ;;
     clear) clear_command "$@" ;;
+    auto-clear) auto_clear_command "$@" ;;
     active-profile) active_profile_command "$@" ;;
     status) status_command "$@" ;;
     open) open_browser ;;

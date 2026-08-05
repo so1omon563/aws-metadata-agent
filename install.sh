@@ -25,6 +25,26 @@ readonly SERVICE_VERSION=$SERVICE_DIR/VERSION
 readonly USER_STATE_RELATIVE='Library/Application Support/aws-metadata-agent'
 readonly BROKER_LABEL=com.github.so1omon563.aws-metadata-agent.broker
 
+print_auto_clear_notice() {
+  local config_file seconds=''
+
+  case "$(uname -s)" in
+    Darwin) config_file=$target_home/$USER_STATE_RELATIVE/auto-clear-seconds ;;
+    Linux) config_file=$target_home/.config/aws-metadata-agent/auto-clear-seconds ;;
+    *) return ;;
+  esac
+  if [[ -r $config_file ]]; then
+    IFS= read -r seconds <"$config_file" || seconds=''
+  fi
+  if [[ $seconds =~ ^[1-9][0-9]*$ ]]; then
+    printf 'Auto-clear: %s seconds. Change with: aws-metadata auto-clear DURATION\n' \
+      "$seconds"
+  else
+    printf '%s\n' \
+      'Auto-clear: off. Enable with: aws-metadata auto-clear DURATION'
+  fi
+}
+
 macos_home_directory() {
   local record
 
@@ -237,6 +257,7 @@ install_user_mode() {
   printf 'Version: %s\n' "$agent_version"
   printf '%s\n' 'No administrator access or system networking was used.'
   printf '%s\n' 'Default AWS credential provider: aws-metadata user mode'
+  print_auto_clear_notice
   printf '%s\n' 'Run: aws-metadata status'
   printf '%s\n' 'Open: http://127.0.0.1:18080'
 }
@@ -586,6 +607,7 @@ esac
 printf 'aws-metadata-agent installed for %s.\n' "$target_user"
 printf 'Version: %s\n' "$agent_version"
 printf '%s\n' 'The credential broker runs as that user; only networking runs as root.'
+print_auto_clear_notice
 printf '%s\n' 'Run: aws-metadata status'
 printf '%s\n' 'Open: http://169.254.169.254'
 if [[ $install_cli == true ]]; then

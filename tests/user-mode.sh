@@ -7,8 +7,13 @@ readonly PROJECT_DIR
 readonly CONFIG_HELPER=$PROJECT_DIR/libexec/aws-metadata-config
 TEMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/aws-metadata-user-mode.XXXXXX")
 readonly TEMP_ROOT
+server_pid=''
 
 cleanup() {
+  if [[ -n $server_pid ]] && kill -0 "$server_pid" 2>/dev/null; then
+    kill "$server_pid" 2>/dev/null || true
+    wait "$server_pid" 2>/dev/null || true
+  fi
   rm -rf "$TEMP_ROOT"
 }
 trap cleanup EXIT
@@ -182,6 +187,93 @@ SERVER_LOG="$server_log" AWS_METADATA_CONFIG="$TEMP_ROOT/system-server-config" \
   "$PROJECT_DIR/libexec/aws-metadata-server"
 [[ $(<"$server_log") == '-r serve ec2 --port 18080' ]] ||
   fail 'system mode did not retain the EC2 listener'
+
+auto_clear_bin=$TEMP_ROOT/auto-clear-bin
+auto_clear_config=$TEMP_ROOT/auto-clear-seconds
+auto_clear_deadline=$TEMP_ROOT/auto-clear-deadline
+auto_clear_state=$TEMP_ROOT/auto-clear-profile-state
+auto_clear_started=$TEMP_ROOT/auto-clear-started
+auto_clear_runas=$TEMP_ROOT/auto-clear-aws-runas
+mkdir -p "$auto_clear_bin"
+cat >"$auto_clear_runas" <<'EOF'
+#!/bin/sh
+: >"${AUTO_CLEAR_STARTED:?}"
+trap 'exit 0' TERM INT HUP
+while :; do
+  sleep 1
+done
+EOF
+cat >"$auto_clear_bin/curl" <<'EOF'
+#!/bin/sh
+case $(cat "${AUTO_CLEAR_STATE:?}") in
+  active) printf '{}\n200' ;;
+  inactive) printf 'profile not set\n500' ;;
+  *) exit 1 ;;
+esac
+EOF
+chmod +x "$auto_clear_runas" "$auto_clear_bin/curl"
+sed "s|AWS_RUNAS=.*|AWS_RUNAS=$auto_clear_runas|" \
+  "$TEMP_ROOT/system-server-config" >"$TEMP_ROOT/auto-clear-server-config"
+
+printf '%s\n' inactive >"$auto_clear_state"
+printf '%s\n' 2 >"$auto_clear_config"
+(
+  status=0
+  PATH="$auto_clear_bin:$PATH" \
+    AUTO_CLEAR_STARTED="$auto_clear_started" \
+    AUTO_CLEAR_STATE="$auto_clear_state" \
+    AWS_METADATA_AUTO_CLEAR_FILE="$auto_clear_config" \
+    AWS_METADATA_AUTO_CLEAR_DEADLINE_FILE="$auto_clear_deadline" \
+    AWS_METADATA_AUTO_CLEAR_POLL_SECONDS=1 \
+    AWS_METADATA_CONFIG="$TEMP_ROOT/auto-clear-server-config" \
+    "$PROJECT_DIR/libexec/aws-metadata-server" || status=$?
+  exit "$status"
+) >/dev/null 2>&1 &
+server_pid=$!
+for _ in {1..30}; do
+  [[ -e $auto_clear_started ]] && break
+  sleep 0.1
+done
+[[ -e $auto_clear_started ]] || fail 'auto-clear broker did not start'
+sleep 0.3
+kill -0 "$server_pid" 2>/dev/null ||
+  fail 'inactive broker exited before a profile was selected'
+[[ ! -e $auto_clear_deadline ]] ||
+  fail 'inactive broker published an auto-clear deadline'
+
+printf '%s\n' active >"$auto_clear_state"
+for _ in {1..30}; do
+  [[ -e $auto_clear_deadline ]] && break
+  sleep 0.1
+done
+[[ -e $auto_clear_deadline ]] || fail 'active broker did not publish a deadline'
+for _ in {1..30}; do
+  kill -0 "$server_pid" 2>/dev/null || break
+  sleep 0.1
+done
+if kill -0 "$server_pid" 2>/dev/null; then
+  fail 'active broker was not stopped at the auto-clear deadline'
+fi
+wait "$server_pid" 2>/dev/null || true
+server_pid=''
+[[ ! -e $auto_clear_deadline ]] || fail 'expired deadline state was retained'
+
+rm -f "$auto_clear_config" "$auto_clear_deadline" "$auto_clear_started"
+PATH="$auto_clear_bin:$PATH" \
+  AUTO_CLEAR_STARTED="$auto_clear_started" \
+  AUTO_CLEAR_STATE="$auto_clear_state" \
+  AWS_METADATA_AUTO_CLEAR_FILE="$auto_clear_config" \
+  AWS_METADATA_AUTO_CLEAR_DEADLINE_FILE="$auto_clear_deadline" \
+  AWS_METADATA_AUTO_CLEAR_POLL_SECONDS=1 \
+  AWS_METADATA_CONFIG="$TEMP_ROOT/auto-clear-server-config" \
+  "$PROJECT_DIR/libexec/aws-metadata-server" &
+server_pid=$!
+sleep 0.5
+kill -0 "$server_pid" 2>/dev/null ||
+  fail 'disabled auto-clear stopped an active broker'
+kill "$server_pid"
+wait "$server_pid" 2>/dev/null || true
+server_pid=''
 
 if [[ $(uname -s) == Darwin && ! -e /etc/aws-metadata-agent/config ]]; then
   MOCK_BIN=$TEMP_ROOT/mock-bin

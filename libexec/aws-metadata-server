@@ -18,6 +18,7 @@ source "$CONFIG_FILE"
 : "${AWS_METADATA_HOME:?Missing AWS_METADATA_HOME}"
 : "${AWS_RUNAS:?Missing AWS_RUNAS}"
 AWS_METADATA_MODE=${AWS_METADATA_MODE:-system}
+readonly MAX_AUTO_CLEAR_SECONDS=31536000
 
 if [[ $(id -u) != "$AWS_METADATA_UID" ]]; then
   printf 'Refusing to run credential broker as uid %s; expected uid %s.\n' \
@@ -28,6 +29,150 @@ fi
 export HOME=$AWS_METADATA_HOME
 export USER=$AWS_METADATA_USER
 export LOGNAME=$AWS_METADATA_USER
+
+auto_clear_config_file() {
+  if [[ -n ${AWS_METADATA_AUTO_CLEAR_FILE:-} ]]; then
+    printf '%s' "$AWS_METADATA_AUTO_CLEAR_FILE"
+    return
+  fi
+  case "$(uname -s)" in
+    Darwin)
+      printf '%s/Library/Application Support/aws-metadata-agent/auto-clear-seconds' \
+        "$HOME"
+      ;;
+    Linux)
+      printf '%s/.config/aws-metadata-agent/auto-clear-seconds' "$HOME"
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+auto_clear_deadline_file() {
+  if [[ -n ${AWS_METADATA_AUTO_CLEAR_DEADLINE_FILE:-} ]]; then
+    printf '%s' "$AWS_METADATA_AUTO_CLEAR_DEADLINE_FILE"
+    return
+  fi
+  printf '%s.deadline' "$(auto_clear_config_file)"
+}
+
+read_auto_clear_seconds() {
+  local file value
+  file=$(auto_clear_config_file) || return 1
+  [[ -r $file ]] || return 1
+  IFS= read -r value <"$file" || return 1
+  [[ $value =~ ^[1-9][0-9]*$ && ${#value} -le 8 ]] || return 1
+  value=$((10#$value))
+  ((value <= MAX_AUTO_CLEAR_SECONDS)) || return 1
+  printf '%s' "$value"
+}
+
+write_auto_clear_deadline() {
+  local deadline=$1 file directory temp_file
+  file=$(auto_clear_deadline_file) || return 1
+  directory=${file%/*}
+  umask 077
+  mkdir -p "$directory" || return 1
+  chmod 0700 "$directory" || return 1
+  temp_file=$(mktemp "$directory/.auto-clear-deadline.XXXXXX") || return 1
+  printf '%s\n' "$deadline" >"$temp_file" || {
+    rm -f "$temp_file"
+    return 1
+  }
+  mv "$temp_file" "$file"
+}
+
+remove_auto_clear_deadline() {
+  local file
+  file=$(auto_clear_deadline_file) || return 0
+  rm -f "$file"
+}
+
+profile_status() {
+  local response status body
+  response=$(curl \
+    --disable \
+    --silent \
+    --noproxy '*' \
+    --connect-timeout 1 \
+    --max-time 2 \
+    --write-out $'\n%{http_code}' \
+    "http://127.0.0.1:${AWS_METADATA_PORT:-18080}/profile" 2>/dev/null) || {
+      printf 'unavailable'
+      return
+    }
+  status=${response##*$'\n'}
+  body=${response%$'\n'*}
+  case $status:$body in
+    200:*) printf 'active' ;;
+    '500:profile not set') printf 'inactive' ;;
+    *) printf 'unavailable' ;;
+  esac
+}
+
+auto_clear_guard() {
+  local broker_pid=$1 active_since=0 seconds=0 deadline=0 published_deadline=0
+  local last_inactive_at now remaining sleep_seconds state
+  local poll_seconds=${AWS_METADATA_AUTO_CLEAR_POLL_SECONDS:-5}
+  [[ $poll_seconds =~ ^[1-9][0-9]*$ ]] || poll_seconds=5
+  last_inactive_at=$(date +%s)
+
+  # ponytail: polling avoids a second proxy. Conservative activation dating can
+  # clear early; an in-flight status request can delay deadline enforcement.
+
+  while kill -0 "$broker_pid" 2>/dev/null; do
+    if ! seconds=$(read_auto_clear_seconds); then
+      seconds=0
+      active_since=0
+      deadline=0
+      published_deadline=0
+      last_inactive_at=$(date +%s)
+      remove_auto_clear_deadline
+      sleep "$poll_seconds"
+      continue
+    fi
+
+    now=$(date +%s)
+    if ((active_since > 0)); then
+      deadline=$((active_since + seconds))
+      if ((deadline != published_deadline)); then
+        write_auto_clear_deadline "$deadline" || true
+        published_deadline=$deadline
+      fi
+      if ((now >= deadline)); then
+        remove_auto_clear_deadline
+        kill -KILL "$broker_pid" 2>/dev/null || true
+        return
+      fi
+    fi
+
+    state=$(profile_status)
+    case $state in
+      active)
+        if ((active_since == 0)); then
+          active_since=$last_inactive_at
+          deadline=$((active_since + seconds))
+          write_auto_clear_deadline "$deadline" || true
+          published_deadline=$deadline
+        fi
+        ;;
+      inactive)
+        active_since=0
+        deadline=0
+        published_deadline=0
+        last_inactive_at=$now
+        remove_auto_clear_deadline
+        ;;
+    esac
+    sleep_seconds=$poll_seconds
+    if ((active_since > 0)); then
+      remaining=$((deadline - $(date +%s)))
+      ((remaining > 0)) || continue
+      ((remaining < sleep_seconds)) && sleep_seconds=$remaining
+    fi
+    sleep "$sleep_seconds"
+  done
+  remove_auto_clear_deadline
+}
 
 case $AWS_METADATA_MODE in
   system) service_type=ec2 ;;
@@ -40,4 +185,5 @@ esac
 
 args=(-r serve "$service_type" --port "${AWS_METADATA_PORT:-18080}")
 
+auto_clear_guard "$$" &
 exec "$AWS_RUNAS" "${args[@]}"
