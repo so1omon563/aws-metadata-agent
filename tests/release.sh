@@ -225,6 +225,11 @@ expected_marker_check="./scripts/release_markers.sh \"\$text\""
 grep -Fq "$expected_release_output" "$workflow"
 grep -Fq 'git log -1 --pretty=%B' "$workflow"
 grep -Fq "$expected_marker_check" "$workflow"
+grep -Fq 'uses: so1omon563/release-creator@v2' "$workflow"
+if grep -Fq 'uses: so1omon563/release-creator@v1' "$workflow"; then
+  printf '%s\n' 'Release workflow still uses release-creator v1.' >&2
+  exit 1
+fi
 if grep -Fq 'PR_TITLE:' "$workflow"; then
   printf '%s\n' 'Release preflight still validates only the PR title.' >&2
   exit 1

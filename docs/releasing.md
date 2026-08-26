@@ -84,7 +84,7 @@ After the release PR merges, `.github/workflows/bump.yml`:
    default-branch merge commit;
 3. creates deterministic `aws-metadata-agent-vVERSION.tar.gz` and matching
    `.sha256` assets from that tag; and
-4. invokes `so1omon563/release-creator@v1` to publish grouped notes and upload
+4. invokes `so1omon563/release-creator@v2` to publish grouped notes and upload
    verified assets when a release marker is present.
 
 After publication, verify the immutable public state rather than relying on a
