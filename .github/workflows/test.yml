@@ -30,7 +30,11 @@ jobs:
 
       - name: Install ShellCheck on macOS
         if: runner.os == 'macOS'
-        run: brew install shellcheck
+        run: |
+          if brew tap | grep -Fxq aws/tap; then
+            brew untap aws/tap
+          fi
+          brew install shellcheck
 
       - name: Install ShellCheck on Ubuntu
         if: runner.os == 'Linux'
