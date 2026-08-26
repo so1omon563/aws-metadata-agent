@@ -136,6 +136,12 @@ def validate_reader_contract(root: Path) -> None:
         "advisory and opt-in",
         "direct `POST /profile`",
         "A lease is coordination metadata",
+        "`refresh` is lease-aware",
+        "lease-state lock from the final ownership check",
+        "Linux uses one canonical state path",
+        "<installing-developer-home>/.local/state/aws-metadata-agent/runtime",
+        "3. Validate and remove malformed, expired, or prior-broker-generation state.",
+        "4. Reject any remaining unexpired lease from the current broker generation.",
         "The lease does **not** protect credentials",
         "An enforcing design is a separate product change",
     ):

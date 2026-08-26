@@ -57,6 +57,7 @@ aws-metadata lease release --token-file PATH
 aws-metadata use PROFILE --lease-token-file PATH
 aws-metadata profile PROFILE --lease-token-file PATH
 aws-metadata clear --lease-token-file PATH
+aws-metadata refresh --lease-token-file PATH
 aws-metadata use PROFILE --force
 ```
 
@@ -70,17 +71,21 @@ the cooperative right to make the next profile-changing CLI operation. This
 keeps acquisition atomic and separate from authentication, which may require a
 browser and a long bounded wait.
 
-`refresh` does not require lease ownership because it reselects the already
-active profile as part of credential renewal. It must not change the lease
-owner, duration, or expiry. Read-only commands and credential requests also do
-not require lease ownership.
+`refresh` is lease-aware because it reads and later reselects the active
+profile. With a live lease, it requires the matching token or an explicit
+`--force`, just like the other profile-changing commands. It must hold the same
+lease-state lock from the final ownership check through reading the active
+profile, calling `/refresh`, and posting the saved profile again. This prevents
+another cooperating CLI from changing the profile between those steps.
+`refresh` must not change the lease owner, duration, or expiry. Read-only
+commands and credential requests do not require lease ownership.
 
 ### Acquire
 
 1. Validate the owner label and TTL before touching state.
 2. Take the lease-state lock with an atomic filesystem operation.
-3. Reject an existing unexpired lease.
-4. Remove malformed, expired, or prior-broker-generation state.
+3. Validate and remove malformed, expired, or prior-broker-generation state.
+4. Reject any remaining unexpired lease from the current broker generation.
 5. Generate at least 128 bits of random token material.
 6. Write the token to a new mode `0600` file and store only its SHA-256 digest
    in the lease record.
@@ -144,7 +149,16 @@ must never read, write, or enforce it.
 | Platform | Private runtime directory |
 | --- | --- |
 | macOS | `~/Library/Application Support/aws-metadata-agent/runtime` |
-| Linux | `${XDG_RUNTIME_DIR}/aws-metadata-agent`, with `~/.local/state/aws-metadata-agent/runtime` as the documented fallback |
+| Linux | `<installing-developer-home>/.local/state/aws-metadata-agent/runtime` |
+
+Linux uses one canonical state path, not an invocation-specific
+`${XDG_RUNTIME_DIR}` path with a home-directory fallback. During installation,
+the agent resolves the private runtime directory to an absolute path under the
+installing developer's home and records it in user-owned agent configuration.
+The supervisor and every CLI invocation must read that same recorded path,
+including invocations from systemd, cron, `sudo`, or a stripped environment.
+They must not choose a different directory from the caller's `HOME` or
+`XDG_RUNTIME_DIR`. The same resolve-once rule applies to the macOS path.
 
 The directory is mode `0700`. The lease record, lock metadata, broker
 generation, and generated token files are mode `0600`. Implementations must
