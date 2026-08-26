@@ -131,6 +131,24 @@ def validate_reader_contract(root: Path) -> None:
         if required not in index:
             raise DocsError(f"docs/README.md is missing navigation group: {required}")
 
+    leasing = (root / "docs/profile-leasing.md").read_text(encoding="utf-8")
+    for required in (
+        "advisory and opt-in",
+        "direct `POST /profile`",
+        "A lease is coordination metadata",
+        "The lease does **not** protect credentials",
+        "An enforcing design is a separate product change",
+    ):
+        if required not in leasing:
+            raise DocsError(
+                f"docs/profile-leasing.md is missing lease boundary: {required}"
+            )
+
+    for relative in ("docs/architecture.md", "docs/security.md"):
+        text = (root / relative).read_text(encoding="utf-8")
+        if "profile-leasing.md" not in text:
+            raise DocsError(f"{relative} does not link the profile leasing design")
+
     getting_started = (root / "docs/getting-started.md").read_text(encoding="utf-8")
     for required in (
         "install -> confirm upstream profile -> check service -> select profile -> verify",

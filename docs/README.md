@@ -51,6 +51,8 @@ exact contract.
 
 - [Architecture](architecture.md) — process ownership, installed files,
   startup, forwarding, protocol compatibility, and failure behavior.
+- [Cooperative profile leasing design](profile-leasing.md) — advisory lease
+  semantics, state ownership, bypass limits, and the enforcement threshold.
 - [Security model](security.md) — threat assumptions, credential exposure,
   privilege boundaries, browser authentication, and pre-install review.
 - [Security policy](../SECURITY.md) — supported security-fix versions and
