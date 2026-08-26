@@ -257,6 +257,12 @@ implement acquire/release, ownership, advisory locking, or per-consumer
 isolation. It watches the shared broker directly, so direct HTTP selection does
 not bypass the timer.
 
+The proposed [cooperative profile leasing design](profile-leasing.md) remains
+advisory because the exposed port belongs directly to `aws-runas`. Honest
+enforcement would require a new controller in front of every browser,
+authentication, EC2, ECS, and IMDSv2 route; even then it would protect profile
+selection, not isolate credential consumers.
+
 ## State lifecycle
 
 | State | Restart | Reboot | Uninstall |

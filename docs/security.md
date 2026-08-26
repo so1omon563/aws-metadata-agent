@@ -75,6 +75,13 @@ selection path and is not extended by profile changes or credential traffic.
 It is disabled by default, stores no profile identity, and has the same
 non-revocation boundary as an explicit clear.
 
+The proposed [cooperative profile leasing design](profile-leasing.md) can
+reduce accidental selection races among callers that opt into the CLI
+contract. It cannot authenticate or block direct HTTP and browser selection,
+restrict profile-specific upstream credential routes, isolate same-UID code,
+or revoke cached credentials. Treat a lease as coordination metadata, never as
+an authorization or credential-containment control.
+
 ## Privilege boundary
 
 macOS user mode has no privileged layer. Its LaunchAgent, installer state,
