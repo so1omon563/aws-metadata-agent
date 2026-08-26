@@ -71,6 +71,16 @@ the cooperative right to make the next profile-changing CLI operation. This
 keeps acquisition atomic and separate from authentication, which may require a
 browser and a long bounded wait.
 
+Every profile-changing CLI path must serialize against lease acquisition.
+`use`, `profile`, `clear`, `refresh`, and their `--force` paths take the same
+lease-state lock before the final lease check and hold it through the upstream
+profile mutation. Acquisition takes that lock before checking for an existing
+lease. Consequently, a command cannot observe no lease, wait for authentication,
+and then change the profile after another cooperating caller acquires a lease.
+The lock must be an OS-managed advisory lock that is released automatically if
+the holding process exits; a persistent lock file that can remain owned after a
+crash is not sufficient.
+
 `refresh` is lease-aware because it reads and later reselects the active
 profile. With a live lease, it requires the matching token or an explicit
 `--force`, just like the other profile-changing commands. It must hold the same

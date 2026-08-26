@@ -136,6 +136,8 @@ def validate_reader_contract(root: Path) -> None:
         "advisory and opt-in",
         "direct `POST /profile`",
         "A lease is coordination metadata",
+        "Every profile-changing CLI path must serialize against lease acquisition",
+        "OS-managed advisory lock",
         "`refresh` is lease-aware",
         "lease-state lock from the final ownership check",
         "Linux uses one canonical state path",
