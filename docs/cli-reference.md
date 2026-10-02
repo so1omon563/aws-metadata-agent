@@ -37,9 +37,12 @@ aws-metadata use example-nonprod --json
 `use` initially posts the upstream profile name to `/profile`. If upstream
 returns an authentication requirement, the command opens the browser and polls
 until credentials are ready or the wait expires. When browser interaction is
-enabled and the wait is positive, the HTTP request deadline is extended to the
-same wait plus a small transport grace period so the caller does not cancel
-upstream authentication prematurely.
+enabled and the wait is positive, initial selection, polling, and the single
+transient retry share one wait budget. No new request starts after the wait
+expires. Each request is capped by the remaining wait plus five seconds of
+transport grace so the caller does not cancel upstream authentication
+prematurely. An explicit `AWS_METADATA_REQUEST_TIMEOUT` may shorten a request,
+but cannot extend that shared deadline.
 
 One narrowly matched upstream SAML transition is retried once: a browser login
 can complete and persist its session while the first STS

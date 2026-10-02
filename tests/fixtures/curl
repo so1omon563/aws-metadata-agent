@@ -9,6 +9,7 @@ request_url=''
 profile_name_request=false
 response_body=${MOCK_CURL_BODY:-}
 response_status=${MOCK_CURL_STATUS:-200}
+response_seconds=0
 
 if [[ ${MOCK_CURL_REQUIRE_DISABLE_FIRST:-false} == true &&
       ${1:-} != --disable ]]; then
@@ -52,10 +53,20 @@ fi
 
 if [[ -n ${MOCK_CURL_RESPONSE_QUEUE:-} &&
       -s ${MOCK_CURL_RESPONSE_QUEUE:-} ]]; then
-  IFS='|' read -r response_status response_body <"$MOCK_CURL_RESPONSE_QUEUE"
+  IFS='|' read -r response_status response_body response_seconds \
+    <"$MOCK_CURL_RESPONSE_QUEUE"
   command tail -n +2 "$MOCK_CURL_RESPONSE_QUEUE" \
     >"${MOCK_CURL_RESPONSE_QUEUE}.next"
   command mv "${MOCK_CURL_RESPONSE_QUEUE}.next" "$MOCK_CURL_RESPONSE_QUEUE"
+fi
+
+if [[ -n ${MOCK_WAIT_CLOCK:-} && -n $response_seconds ]]; then
+  now=$(cat "$MOCK_WAIT_CLOCK")
+  if ((response_seconds > max_time)); then
+    printf '%s\n' "$((now + max_time))" >"$MOCK_WAIT_CLOCK"
+    exit 28
+  fi
+  printf '%s\n' "$((now + response_seconds))" >"$MOCK_WAIT_CLOCK"
 fi
 
 if [[ $method == GET &&

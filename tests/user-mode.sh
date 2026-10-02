@@ -148,6 +148,58 @@ if "$CONFIG_HELPER" validate "$config_link" "$credentials_conflict" \
   fail 'validation accepted default shared credentials'
 fi
 
+# AWS accepts both assignment delimiters and comments after section headers.
+for header in '[default]' '[default] # host settings' '[default]; host settings'; do
+  for delimiter in '=' ':'; do
+    printf '%s\r\n' "$header" \
+      "credential_process $delimiter /usr/local/bin/other-provider" >"$conflict"
+    cp "$conflict" "$TEMP_ROOT/before-conflict"
+    if "$CONFIG_HELPER" validate "$conflict" >/dev/null 2>&1 ||
+       "$CONFIG_HELPER" add "$conflict" "$command_path" >/dev/null 2>&1; then
+      fail 'setup accepted a default credential provider with alternate INI syntax'
+    fi
+    cmp -s "$conflict" "$TEMP_ROOT/before-conflict" ||
+      fail 'setup modified conflicting default credentials'
+
+    printf '%s\r\n' "$header" \
+      "aws_access_key_id $delimiter ASIASYNTHETICONLY" >"$credentials_conflict"
+    cp "$config_target" "$TEMP_ROOT/before-config"
+    if "$CONFIG_HELPER" validate "$config_link" "$credentials_conflict" \
+         >/dev/null 2>&1 ||
+       "$CONFIG_HELPER" add "$config_link" "$command_path" \
+         "$credentials_conflict" >/dev/null 2>&1; then
+      fail 'setup accepted shared credentials with alternate INI syntax'
+    fi
+    cmp -s "$config_target" "$TEMP_ROOT/before-config" ||
+      fail 'shared credential conflict changed the config'
+  done
+
+  printf '%s\r\n' "$header" 'region = us-west-2' \
+    '[profile keep-me]' 'region = us-east-1' >"$config_target"
+  cp "$config_target" "$TEMP_ROOT/before-config"
+  "$CONFIG_HELPER" add "$config_link" "$command_path"
+  python3 - "$config_link" <<'PY'
+import configparser
+import sys
+
+config = configparser.RawConfigParser()
+config.read(sys.argv[1])
+assert config['default']['credential_process'].endswith(' _credential-process')
+assert config['profile keep-me']['region'] == 'us-east-1'
+PY
+  checksum_before=$(shasum -a 256 "$config_target")
+  "$CONFIG_HELPER" add "$config_link" "$command_path"
+  [[ $(shasum -a 256 "$config_target") == "$checksum_before" ]] ||
+    fail 'setup changed the commented default on rerun'
+  "$CONFIG_HELPER" remove "$config_link"
+  cmp -s "$config_target" "$TEMP_ROOT/before-config" ||
+    fail 'cleanup changed the commented default section'
+  printf '%s\r\n' '[default]' >>"$config_target"
+  if "$CONFIG_HELPER" validate "$config_link" >/dev/null 2>&1; then
+    fail 'validation accepted duplicate defaults with alternate headers'
+  fi
+done
+
 migration=$TEMP_ROOT/aws/migration
 printf '%s\n' \
   '# aws-metadata-agent user mode: begin' \

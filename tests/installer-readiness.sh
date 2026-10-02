@@ -27,6 +27,9 @@ cat >"$TEMP_ROOT/bin/sleep" <<'EOF'
 EOF
 cat >"$TEMP_ROOT/bin/curl" <<'EOF'
 #!/bin/sh
+if [ "${1:-}" != --disable ]; then
+  exit 22
+fi
 output_file=''
 while [ "$#" -gt 0 ]; do
   case $1 in

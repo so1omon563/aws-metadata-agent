@@ -152,7 +152,7 @@ wait_for_metadata_endpoint() {
   body_file=$(mktemp "${TMPDIR:-/tmp}/aws-metadata-install.XXXXXX") || return 1
   for _ in {1..50}; do
     status=000
-    if status=$(curl --silent --show-error --noproxy '*' \
+    if status=$(curl --disable --silent --show-error --noproxy '*' \
       --connect-timeout 1 --max-time 2 \
       --output "$body_file" --write-out '%{http_code}' \
       "$endpoint/profile" 2>/dev/null); then
