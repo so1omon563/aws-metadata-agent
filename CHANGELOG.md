@@ -16,6 +16,8 @@ All notable changes to this project are documented here. Changes remain under
   settings that reject the healthy no-profile response.
 - Installer readiness now accepts the newline-terminated no-profile response
   returned by the supported upstream broker.
+- Auto-clear now recognizes that same no-profile response, so idle time does
+  not cause a newly selected profile to be cleared immediately.
 - Successful credential-process calls now remove temporary profile-name files
   before starting the upstream credential provider.
 

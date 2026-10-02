@@ -101,7 +101,7 @@ profile_status() {
       return
     }
   status=${response##*$'\n'}
-  body=${response%$'\n'*}
+  body=$(printf '%s' "${response%$'\n'*}")
   case $status:$body in
     200:*) printf 'active' ;;
     '500:profile not set') printf 'inactive' ;;
