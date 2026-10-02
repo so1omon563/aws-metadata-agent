@@ -54,18 +54,13 @@ chmod +x "$SERVICE_MOCKS/uname" "$SERVICE_MOCKS/launchctl" \
 cat >"$WAIT_MOCKS/date" <<'EOF'
 #!/usr/bin/env bash
 set -eu
-count=$(cat "${MOCK_WAIT_CLOCK:?}")
-count=$((count + 1))
-printf '%s\n' "$count" >"$MOCK_WAIT_CLOCK"
-if ((count < 3)); then
-  printf '%s\n' 100
-else
-  printf '%s\n' 108
-fi
+cat "${MOCK_WAIT_CLOCK:?}"
 EOF
 cat >"$WAIT_MOCKS/sleep" <<'EOF'
 #!/usr/bin/env bash
-:
+set -eu
+now=$(cat "${MOCK_WAIT_CLOCK:?}")
+printf '%s\n' "$((now + $1))" >"$MOCK_WAIT_CLOCK"
 EOF
 chmod +x "$WAIT_MOCKS/date" "$WAIT_MOCKS/sleep"
 
@@ -213,7 +208,8 @@ USER_MODE_HOME=$TEMP_ROOT/user-mode-home
 USER_MODE_STATE="$USER_MODE_HOME/Library/Application Support/aws-metadata-agent"
 USER_MODE_RUNAS=$TEMP_ROOT/aws-runas
 USER_MODE_RUNAS_LOG=$TEMP_ROOT/aws-runas-call
-mkdir -p "$USER_MODE_STATE"
+USER_MODE_TMP=$TEMP_ROOT/credential-process-tmp
+mkdir -p "$USER_MODE_STATE" "$USER_MODE_TMP"
 printf '%s\n' user >"$USER_MODE_STATE/user-mode"
 printf '%s\n' "$USER_MODE_RUNAS" >"$USER_MODE_STATE/aws-runas-path"
 cat >"$USER_MODE_RUNAS" <<'EOF'
@@ -227,6 +223,7 @@ EOF
 chmod +x "$USER_MODE_RUNAS"
 process_output=$(env \
   HOME="$USER_MODE_HOME" \
+  TMPDIR="$USER_MODE_TMP" \
   AWS_PROFILE=unexpected \
   AWS_CONFIG_FILE=/unexpected/config \
   MOCK_RUNAS_LOG="$USER_MODE_RUNAS_LOG" \
@@ -243,6 +240,7 @@ if [[ $(<"$USER_MODE_RUNAS_LOG") != '--output json personal|unset|unset' ]]; the
   exit 1
 fi
 HOME="$USER_MODE_HOME" \
+  TMPDIR="$USER_MODE_TMP" \
   MOCK_RUNAS_LOG="$USER_MODE_RUNAS_LOG" \
   MOCK_CURL_STATUS=200 \
   MOCK_CURL_PROFILE_NAME=personal \
@@ -253,9 +251,14 @@ if [[ $(wc -l <"$USER_MODE_RUNAS_LOG" | tr -d ' ') != 2 ]]; then
 fi
 assert_exit 1 env \
   HOME="$USER_MODE_HOME" \
+  TMPDIR="$USER_MODE_TMP" \
   MOCK_CURL_STATUS=500 \
   MOCK_CURL_BODY='profile not set' \
   "$CLI" _credential-process
+if [[ -n $(find "$USER_MODE_TMP" -type f -print) ]]; then
+  printf '%s\n' 'credential_process left temporary response files behind.' >&2
+  exit 1
+fi
 
 : >"$CURL_CALL_LOG"
 MOCK_CURL_STATUS=200 MOCK_CURL_PROFILE_NAME=personal \
@@ -587,8 +590,63 @@ AWS_METADATA_WAIT_SECONDS=-1 assert_exit 2 \
 printf '%s\n' 0 >"$WAIT_CLOCK"
 printf '401|\n401|\n' >"$CURL_RESPONSE_QUEUE"
 PATH="$WAIT_MOCKS:$PATH" MOCK_WAIT_CLOCK="$WAIT_CLOCK" \
+  MOCK_CURL_STATUS=401 \
   MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
   assert_exit 5 "$CLI" use test-profile --wait 08
+
+# The initial request and retries share one deadline, including refresh.
+for command_name in use refresh; do
+  printf '%s\n' 0 >"$WAIT_CLOCK"
+  : >"$CURL_CALL_LOG"
+  : >"$CURL_RESPONSE_QUEUE"
+  expected_calls=2
+  selection_args=(use test-profile)
+  if [[ $command_name == refresh ]]; then
+    selection_args=(refresh)
+    printf '200|{}\n200|\n200|success\n' >"$CURL_RESPONSE_QUEUE"
+    expected_calls=5
+  fi
+  printf '401||6\n401||2\n200||14\n' >>"$CURL_RESPONSE_QUEUE"
+  PATH="$WAIT_MOCKS:$PATH" MOCK_WAIT_CLOCK="$WAIT_CLOCK" \
+    MOCK_CURL_CALL_LOG="$CURL_CALL_LOG" \
+    MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
+    assert_exit 5 "$CLI" "${selection_args[@]}" --wait 10 --json
+  assert_curl_calls "$expected_calls"
+  [[ $(<"$WAIT_CLOCK") == 10 ]] || {
+    printf '%s\n' 'Authentication exceeded its wait before retrying.' >&2
+    exit 1
+  }
+done
+
+printf '%s\n' 0 >"$WAIT_CLOCK"
+: >"$CURL_MAX_TIME_LOG"
+printf '500|%s|6\n200||14\n' "$TRANSIENT_SAML_STS_TIMEOUT" >"$CURL_RESPONSE_QUEUE"
+PATH="$WAIT_MOCKS:$PATH" MOCK_WAIT_CLOCK="$WAIT_CLOCK" \
+  MOCK_CURL_MAX_TIME_LOG="$CURL_MAX_TIME_LOG" \
+  MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
+  assert_exit 5 "$CLI" use test-profile --wait 10
+[[ $(tail -n 1 "$CURL_MAX_TIME_LOG") == 9 && \
+   $(<"$WAIT_CLOCK") == 15 ]] || {
+  printf '%s\n' 'Transient STS retry did not retain the shared deadline.' >&2
+  exit 1
+}
+
+# A slow poll is capped by remaining time plus grace, even with an override.
+for timeout_override in '' 75; do
+  printf '%s\n' 0 >"$WAIT_CLOCK"
+  : >"$CURL_MAX_TIME_LOG"
+  printf '401||6\n200||14\n' >"$CURL_RESPONSE_QUEUE"
+  PATH="$WAIT_MOCKS:$PATH" MOCK_WAIT_CLOCK="$WAIT_CLOCK" \
+    AWS_METADATA_REQUEST_TIMEOUT="$timeout_override" \
+    MOCK_CURL_MAX_TIME_LOG="$CURL_MAX_TIME_LOG" \
+    MOCK_CURL_RESPONSE_QUEUE="$CURL_RESPONSE_QUEUE" \
+    assert_exit 5 "$CLI" use test-profile --wait 10
+  [[ $(tail -n 1 "$CURL_MAX_TIME_LOG") == 7 && \
+     $(<"$WAIT_CLOCK") == 15 ]] || {
+    printf '%s\n' 'Polling did not cap the request at the shared deadline.' >&2
+    exit 1
+  }
+done
 
 # Refresh forwards the normalized wait into the shared profile-selection path.
 : >"$CURL_MAX_TIME_LOG"

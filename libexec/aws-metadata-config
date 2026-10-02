@@ -6,6 +6,7 @@ set -o pipefail
 readonly BEGIN_MARKER='# aws-metadata-agent user mode: begin'
 readonly END_MARKER='# aws-metadata-agent user mode: end'
 readonly DEFAULT_HEADER='[default]'
+readonly DEFAULT_SECTION_RE='^[[:space:]]*[[]default[]][[:space:]]*([#;].*)?$'
 
 fail() {
   printf 'aws-metadata-config: %s\n' "$1" >&2
@@ -67,11 +68,10 @@ insert_block() {
   local block=$2
   local output=$3
 
-  command awk -v block="$block" '
+  command awk -v block="$block" -v default_section="$DEFAULT_SECTION_RE" '
     {
       print
-      if (!inserted &&
-          $0 ~ /^[[:space:]]*\[default\][[:space:]]*$/) {
+      if (!inserted && $0 ~ default_section) {
         while ((getline line < block) > 0) {
           print line
         }
@@ -137,26 +137,26 @@ extract_block() {
 default_section_count() {
   local input=$1
 
-  grep -Ec '^[[:space:]]*\[default\][[:space:]]*$' "$input" 2>/dev/null ||
+  grep -Ec "$DEFAULT_SECTION_RE" "$input" 2>/dev/null ||
     true
 }
 
 default_has_credential_settings() {
   local input=$1
 
-  command awk '
+  command awk -v default_section="$DEFAULT_SECTION_RE" '
     /^[[:space:]]*\[/ {
-      in_default = ($0 ~ /^[[:space:]]*\[default\][[:space:]]*$/)
+      in_default = ($0 ~ default_section)
       next
     }
     in_default {
       line = $0
       sub(/^[[:space:]]*/, "", line)
-      if (line ~ /^[#;]/ || line !~ /=/) {
+      if (line ~ /^[#;]/ || line !~ /[=:]/) {
         next
       }
       key = line
-      sub(/[[:space:]]*=.*/, "", key)
+      sub(/[[:space:]]*[=:].*/, "", key)
       key = tolower(key)
       gsub(/[[:space:]]/, "", key)
       if (key ~ /^(aws_access_key_id|aws_secret_access_key|aws_session_token|credential_process|credential_source|source_profile|role_arn|web_identity_token_file|sso_.*|login_session)$/) {
@@ -171,15 +171,15 @@ default_has_credential_settings() {
 default_credentials_has_settings() {
   local input=$1
 
-  command awk '
+  command awk -v default_section="$DEFAULT_SECTION_RE" '
     /^[[:space:]]*\[/ {
-      in_default = ($0 ~ /^[[:space:]]*\[default\][[:space:]]*$/)
+      in_default = ($0 ~ default_section)
       next
     }
     in_default {
       line = $0
       sub(/^[[:space:]]*/, "", line)
-      if (line !~ /^[#;]/ && line ~ /=/) {
+      if (line !~ /^[#;]/ && line ~ /[=:]/) {
         found = 1
         exit
       }

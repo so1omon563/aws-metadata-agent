@@ -5,6 +5,18 @@ All notable changes to this project are documented here. Changes remain under
 
 ## [Unreleased]
 
+### Fixed
+
+- User-mode setup now recognizes colon-delimited credential settings and
+  commented default profile headers, preventing provider conflicts and
+  duplicate AWS config sections.
+- Authentication polling and the transient STS retry now share one wait
+  deadline, with each request bounded by the remaining time plus transport grace.
+- Installer readiness requests now ignore user curl startup files, including
+  settings that reject the healthy no-profile response.
+- Successful credential-process calls now remove temporary profile-name files
+  before starting the upstream credential provider.
+
 ## [0.4.4] - 2026-08-03
 
 ### Added
