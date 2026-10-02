@@ -156,8 +156,7 @@ wait_for_metadata_endpoint() {
       --connect-timeout 1 --max-time 2 \
       --output "$body_file" --write-out '%{http_code}' \
       "$endpoint/profile" 2>/dev/null); then
-      body=$(command cat "$body_file"; printf x)
-      body=${body%x}
+      body=$(command cat "$body_file")
       if [[ $status == 500 && $body == 'profile not set' ]] ||
          [[ $status == 200 && $body =~ $profile_object &&
             $body =~ $profile_role ]]; then
