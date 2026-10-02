@@ -72,9 +72,10 @@ assert_rejected() {
 }
 
 assert_ready 500 'profile not set'
+assert_ready 500 $'profile not set\n'
 assert_ready 200 '{"role_arn":""}'
 assert_ready 200 '{"auth_url":"https://example.invalid","role_arn":"example"}'
-assert_rejected 500 $'profile not set\n'
+assert_rejected 500 $'profile not set\nunrelated error'
 assert_rejected 200 '{}'
 assert_rejected 200 '{"role_arn":}'
 assert_rejected 200 '{"auth_url":""}'
