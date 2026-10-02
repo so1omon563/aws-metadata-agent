@@ -246,7 +246,16 @@ auto_clear_deadline=$TEMP_ROOT/auto-clear-deadline
 auto_clear_state=$TEMP_ROOT/auto-clear-profile-state
 auto_clear_started=$TEMP_ROOT/auto-clear-started
 auto_clear_runas=$TEMP_ROOT/auto-clear-aws-runas
+auto_clear_clock=$TEMP_ROOT/auto-clear-clock
+auto_clear_observed=$TEMP_ROOT/auto-clear-observed
 mkdir -p "$auto_clear_bin"
+# Hold time still while observing the deadline, then advance it to expire.
+# The inactive response advances past an entire exposure window first.
+printf '%s\n' 100 >"$auto_clear_clock"
+cat >"$auto_clear_bin/date" <<'EOF'
+#!/bin/sh
+cat "${AUTO_CLEAR_CLOCK:?}"
+EOF
 cat >"$auto_clear_runas" <<'EOF'
 #!/bin/sh
 : >"${AUTO_CLEAR_STARTED:?}"
@@ -259,11 +268,15 @@ cat >"$auto_clear_bin/curl" <<'EOF'
 #!/bin/sh
 case $(cat "${AUTO_CLEAR_STATE:?}") in
   active) printf '{}\n200' ;;
-  inactive) printf 'profile not set\n500' ;;
+  inactive)
+    printf 'profile not set\n\n500'
+    cat "${AUTO_CLEAR_CLOCK:?}" >>"${AUTO_CLEAR_OBSERVED:?}"
+    printf '%s\n' 200 >"$AUTO_CLEAR_CLOCK"
+    ;;
   *) exit 1 ;;
 esac
 EOF
-chmod +x "$auto_clear_runas" "$auto_clear_bin/curl"
+chmod +x "$auto_clear_runas" "$auto_clear_bin/curl" "$auto_clear_bin/date"
 sed "s|AWS_RUNAS=.*|AWS_RUNAS=$auto_clear_runas|" \
   "$TEMP_ROOT/system-server-config" >"$TEMP_ROOT/auto-clear-server-config"
 
@@ -274,6 +287,8 @@ printf '%s\n' 2 >"$auto_clear_config"
   PATH="$auto_clear_bin:$PATH" \
     AUTO_CLEAR_STARTED="$auto_clear_started" \
     AUTO_CLEAR_STATE="$auto_clear_state" \
+    AUTO_CLEAR_CLOCK="$auto_clear_clock" \
+    AUTO_CLEAR_OBSERVED="$auto_clear_observed" \
     AWS_METADATA_AUTO_CLEAR_FILE="$auto_clear_config" \
     AWS_METADATA_AUTO_CLEAR_DEADLINE_FILE="$auto_clear_deadline" \
     AWS_METADATA_AUTO_CLEAR_POLL_SECONDS=1 \
@@ -287,7 +302,11 @@ for _ in {1..30}; do
   sleep 0.1
 done
 [[ -e $auto_clear_started ]] || fail 'auto-clear broker did not start'
-sleep 0.3
+for _ in {1..50}; do
+  grep -Fqx 200 "$auto_clear_observed" 2>/dev/null && break
+  sleep 0.1
+done
+grep -Fqx 200 "$auto_clear_observed" || fail 'inactive broker was not observed after idle interval'
 kill -0 "$server_pid" 2>/dev/null ||
   fail 'inactive broker exited before a profile was selected'
 [[ ! -e $auto_clear_deadline ]] ||
@@ -299,6 +318,8 @@ for _ in {1..30}; do
   sleep 0.1
 done
 [[ -e $auto_clear_deadline ]] || fail 'active broker did not publish a deadline'
+[[ $(<"$auto_clear_deadline") == 202 ]] || fail 'idle time counted toward active exposure'
+printf '%s\n' 202 >"$auto_clear_clock"
 for _ in {1..30}; do
   kill -0 "$server_pid" 2>/dev/null || break
   sleep 0.1
@@ -314,6 +335,8 @@ rm -f "$auto_clear_config" "$auto_clear_deadline" "$auto_clear_started"
 PATH="$auto_clear_bin:$PATH" \
   AUTO_CLEAR_STARTED="$auto_clear_started" \
   AUTO_CLEAR_STATE="$auto_clear_state" \
+  AUTO_CLEAR_CLOCK="$auto_clear_clock" \
+  AUTO_CLEAR_OBSERVED="$auto_clear_observed" \
   AWS_METADATA_AUTO_CLEAR_FILE="$auto_clear_config" \
   AWS_METADATA_AUTO_CLEAR_DEADLINE_FILE="$auto_clear_deadline" \
   AWS_METADATA_AUTO_CLEAR_POLL_SECONDS=1 \
