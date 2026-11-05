@@ -70,11 +70,16 @@ Applications using the default AWS credential chain require no agent-specific
 profile selection. If a GUI requires a profile choice, use `default`. Do not
 set a Terraform AWS provider `profile` merely to use user mode.
 
-Setup refuses to replace another credential source in `[default]`, including
-static credentials, SSO, role settings, or another `credential_process`. It
-also refuses a populated `[default]` entry in `~/.aws/credentials`. Move or
-rename that existing default credential configuration before retrying. Named
-profiles remain untouched.
+Setup recognizes the effective default profile in `~/.aws/config`, including
+`[default]`, `[profile default]`, and quoted named forms such as
+`[profile "default"]`. It refuses multiple sections mapping to that profile or
+an existing credential source, including static credentials, SSO, role
+settings, or another `credential_process`. Harmless settings, including
+indented options, are preserved. Unrelated named profiles remain untouched.
+
+Setup also refuses a populated literal `[default]` entry in
+`~/.aws/credentials`; named-profile syntax applies only to the config file.
+Move or rename conflicting default credential configuration before retrying.
 
 Applications that support explicit endpoint environment settings may instead
 use either protocol exposed by the same listener:

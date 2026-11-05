@@ -5,6 +5,7 @@ set -eu
 PROJECT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 readonly PROJECT_DIR
 readonly CONFIG_HELPER=$PROJECT_DIR/libexec/aws-metadata-config
+python3 "$PROJECT_DIR/tests/aws-config.py"
 TEMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/aws-metadata-user-mode.XXXXXX")
 readonly TEMP_ROOT
 server_pid=''
