@@ -139,11 +139,11 @@ assert_contains \
 # shellcheck disable=SC2016
 assert_contains \
   "$PROJECT_DIR/install.sh" \
-  'prior_config_version=$((10#$prior_config_version))'
+  'validate_config_schema "$config_file"'
 # shellcheck disable=SC2016
 assert_contains \
   "$PROJECT_DIR/install.sh" \
-  'if ((prior_config_version > CONFIG_SCHEMA_VERSION)); then'
+  'validate_config_schema /etc/aws-metadata-agent/config'
 # shellcheck disable=SC2016
 assert_contains \
   "$PROJECT_DIR/bin/aws-metadata" \

@@ -10,6 +10,7 @@ test:
 	./tests/bootstrap.sh
 	./tests/cli.sh
 	./tests/layout.sh
+	$(PYTHON) tests/installer-state.py
 	./tests/installer-readiness.sh
 	./tests/user-mode.sh
 	./tests/uninstall.sh
