@@ -5,6 +5,33 @@ All notable changes to this project are documented here. Changes remain under
 
 ## [Unreleased]
 
+## [0.4.6] - 2026-11-05
+
+### Fixed
+
+- User-mode setup preserves indented AWS default-profile settings, multiline
+  values, and indented section boundaries when adding its process provider.
+- AWS config default-profile matching now recognizes named and quoted default
+  sections, refuses conflicting or duplicate effective defaults, and repairs
+  the managed provider's earlier unsafe insertion position on repeated setup.
+- User-mode setup validates existing installer schema state before changing
+  configuration or services. Both modes reject malformed and unsupported
+  future schema values without rewriting them.
+
+### Changed
+
+- Clarified user-mode verification, maintenance, rollback limitations, and
+  process-versus-package version reporting. Added credential-free restart and
+  state-preservation regression coverage.
+
+### Known limitations
+
+- Homebrew upgrades do not automatically reload an already-running user-mode
+  guard. Explicit user-mode setup remains the proposed restart workaround;
+  it interrupts the broker and clears the active profile selection while
+  retaining the saved auto-clear duration. Native macOS/Homebrew old-to-new
+  upgrade verification remains pending for this release.
+
 ## [0.4.5] - 2026-10-01
 
 ### Fixed
@@ -261,7 +288,8 @@ Other host configurations and Linux container-runtime access remain
 unverified. The metadata endpoint exposes one globally active profile, and the
 active selection must be restored after the broker restarts.
 
-[Unreleased]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.4.5...HEAD
+[Unreleased]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.4.6...HEAD
+[0.4.6]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/so1omon563/aws-metadata-agent/compare/v0.4.2...v0.4.3
