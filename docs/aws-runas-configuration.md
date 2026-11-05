@@ -60,15 +60,25 @@ Keep the three profile concepts distinct:
 
 `aws-metadata-agent` owns the service integration:
 
-- the root-owned installed copy of the `aws-runas` executable;
 - the developer-owned broker process;
-- forwarding from `169.254.169.254:80` to that broker;
+- in system mode, the root-owned installed copy of `aws-runas` and forwarding
+  from `169.254.169.254:80` to that broker;
+- in macOS user mode, the user LaunchAgent, recorded upstream executable path,
+  and marked default `credential_process` block;
 - selection of one configured profile through `aws-metadata use`.
 
-Installation does not read, create, copy, or modify `~/.aws/config`,
-`~/.aws/credentials`, or upstream cache files. The broker runs as the installing
-developer, so it reads the same user-owned configuration as an interactive
-`aws-runas` command.
+System-mode installation does not edit AWS configuration or upstream cache
+files. macOS user-mode setup validates the installing user's `~/.aws/config`
+and `~/.aws/credentials`, then adds or updates only its marked process-provider
+block under `[default]` in `~/.aws/config`, creating the file and section if
+needed. It preserves named profiles and unrelated default settings and refuses
+competing default credential sources. User-mode uninstall removes only that
+marked block; it does not remove unrelated AWS settings or upstream caches.
+See [macOS user mode](user-mode.md#connect-applications).
+
+In both modes, the broker runs as the installing developer and reads that
+user's upstream configuration and caches. The agent does not own named
+upstream profiles, source credentials, or browser-authentication state.
 
 ## Configuration files
 
@@ -96,7 +106,7 @@ A minimal role profile uses a source profile and role ARN:
 region = us-west-2
 
 [profile example-iam]
-source_profile = default
+source_profile = example-source
 role_arn = <role-arn>
 ```
 
@@ -104,13 +114,17 @@ When the role requires MFA, add the MFA device ARN to that profile:
 
 ```ini
 [profile example-iam-mfa]
-source_profile = default
+source_profile = example-source
 role_arn = <role-arn>
 mfa_serial = <mfa-device-arn>
 ```
 
-The referenced source profile must have a valid upstream-supported credential
-source. Do not put access keys in `~/.aws/config`. Follow the official
+The fictional `example-source` profile must be configured separately with a
+valid upstream-supported credential source. In user mode, do not use the
+agent-managed `default` process provider as the source for an upstream role:
+that provider depends on the role already selected through the broker. Keep
+upstream authentication independent of the consumer's metadata provider.
+Do not put access keys in `~/.aws/config`. Follow the official
 [IAM Configuration Guide](https://mmmorris1975.github.io/aws-runas/iam_config.html)
 for source credentials, shared MFA settings, session duration attributes, and
 environment-variable behavior.

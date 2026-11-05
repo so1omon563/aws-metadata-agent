@@ -131,18 +131,25 @@ aws-metadata active-profile
 aws-metadata clear
 ```
 
-Routine Homebrew upgrades follow the stable `opt` path and do not require
-setup:
+Homebrew upgrades preserve the stable `opt` references for future process
+starts:
 
 ```sh
 brew upgrade aws-metadata-agent
 aws-metadata version
-aws-metadata status
 ```
 
-If user mode was configured by an older formula that used versioned Cellar
-paths, run `aws-metadata setup --mode user` once after upgrading. Repeated
-setup remains supported for migration or repair. To remove only user mode:
+They do not reload an already-running auto-clear guard. Package version and
+endpoint health alone cannot prove that the guard is using the upgraded code.
+Read the [running-process caveat and proposed setup workaround](upgrades.md#macos-user-mode-running-process-caveat)
+for the restart, profile-reselection, and native-validation boundary. Repeated
+setup remains supported for migration or repair, including older versioned
+Cellar references.
+
+Before attempting a downgrade, read the
+[user-mode rollback limitation](upgrades.md#homebrew-managed-user-mode).
+Do not remove a working package before verifying a compatible package-managed
+replacement. To deliberately remove only user mode:
 
 ```sh
 aws-metadata uninstall --mode user
