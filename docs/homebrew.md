@@ -191,15 +191,18 @@ Upgrade the Homebrew payload:
 brew update
 brew upgrade aws-metadata-agent
 aws-metadata version
-aws-metadata status
-aws-metadata diagnose
 ```
 
-Routine user-mode upgrades keep the LaunchAgent and default
-`credential_process` valid through Homebrew's stable `opt` path and do not
-require setup. If user mode was configured by an older formula that used
-versioned Cellar paths, run `aws-metadata setup --mode user` once after
-upgrading; that migration restarts the broker, so reselect the active profile.
+In user mode, the stable `opt` path keeps the LaunchAgent and default
+`credential_process` references valid for new process starts. It does not
+reload an already-running auto-clear guard. A new package version or healthy
+service status does not prove that the guard is running the new code.
+
+See the [user-mode running-process caveat and proposed setup workaround](upgrades.md#macos-user-mode-running-process-caveat)
+before treating the upgrade as complete. That guide explains the interruption,
+profile reselection, older Cellar-path migration, and native macOS validation
+still needed. Automatic guard reload is an unresolved issue, not a feature
+provided by the stable path.
 
 System mode copies a root-owned payload outside Homebrew. Run
 `aws-metadata setup --mode system` after each package upgrade to refresh it.
@@ -235,16 +238,20 @@ remove agent service state, which is why the matching explicit
 ## Rollback
 
 The tap distributes the current supported release rather than retaining every
-historical formula. Review the target release notes for schema or path
-incompatibilities, remove service state and the Homebrew payload, then install
-the exact earlier tag through its verified direct/source path. That temporarily
-changes installation ownership away from Homebrew.
+historical formula. The safe path depends on service mode:
 
-To return to the current formula, run the older release's `./uninstall.sh`,
-then reinstall the formula and run `aws-metadata setup --mode user` or
-`--mode system`. Do not keep source-owned and package-managed commands as
-competing installations. See
-[Upgrades and rollback](upgrades.md#rollback) for the full transition.
+- **User mode:** keep the working Homebrew package and service until a
+  compatible package-managed replacement and recovery sequence are verified.
+  No historical no-sudo rollback procedure is validated here. A direct/source
+  system installation is not an equivalent replacement. See the
+  [user-mode rollback limitation](upgrades.md#homebrew-managed-user-mode).
+- **System mode:** a reviewed compatible older tag may use a direct/source
+  ownership transition, followed by an explicit return to Homebrew. Follow the
+  [system-mode procedure](upgrades.md#homebrew-managed-system-mode), including
+  compatibility and recovery checks before removal.
+
+Do not keep source-owned and package-managed commands as competing
+installations or switch service modes merely to work around a rollback limit.
 
 The maintainer-only formula wrapper, environment, and CI contract is in
 [Release process](releasing.md#formula-contract).

@@ -6,8 +6,10 @@ and Homebrew publication automation lives in [Release process](releasing.md).
 ## Version and compatibility policy
 
 `VERSION` is the source of truth for the project version, and the matching Git
-tag adds a `v` prefix. `aws-metadata version` reports the release copied into
-the root-owned service directory.
+tag adds a `v` prefix. Through Homebrew, `aws-metadata version` reports the
+packaged release in either mode. Direct/source commands default to the release
+copied into the root-owned service directory. This reads a file, not the
+version of a running broker or auto-clear guard.
 
 Only tagged releases are supported installation inputs. The project follows
 semantic versioning. While the project is on `0.x`, a minor release may contain
@@ -29,8 +31,10 @@ Before upgrading or rolling back:
 3. Keep the current installer or package available until the target is
    verified.
 
-The root-owned configuration records agent and schema versions. An installer
-rejects a newer unsupported schema rather than silently rewriting it. A
+Installer configuration records agent and schema versions. It is user-owned
+in user mode and root-owned in system mode. The system-mode installer
+rejects a newer unsupported schema rather than silently rewriting it; user-mode
+setup does not perform that schema-compatibility check. A
 release that removes, renames, or reinterprets installer state must increment
 the schema and include a tested migration.
 
@@ -42,36 +46,68 @@ credential source; system mode does not edit AWS configuration.
 ## Homebrew upgrade
 
 Homebrew owns the package command. User mode references Homebrew's stable
-`opt` path, so routine formula upgrades keep its LaunchAgent and default
-`credential_process` valid:
+`opt` path, keeping its LaunchAgent and default `credential_process` paths
+valid after a package upgrade:
 
 ```sh
 brew update
 brew upgrade aws-metadata-agent
 aws-metadata version
-aws-metadata status
-aws-metadata diagnose
 ```
 
-If user mode was set up by a formula that used versioned Cellar paths, run
-`aws-metadata setup --mode user` once after upgrading to migrate both
-integrations to the stable path. Later routine user-mode upgrades do not
-require setup.
+### macOS user mode: running-process caveat
+
+A stable path affects future process starts; it does not reload a guard that
+is already running. `brew upgrade` can therefore install a new release while
+the old auto-clear guard continues running. A new `aws-metadata version`, a
+healthy endpoint, or successful `diagnose` output does not prove that the
+guard uses the new code. Automatic guard reload remains an unresolved upgrade
+issue; this documentation does not fix it.
+
+The proposed maintenance workaround is to rerun explicit user-mode setup
+after the package upgrade. The current installer unloads and bootstraps the
+user LaunchAgent. It also migrates older versioned Cellar references to the
+stable package path. This sequence has not yet been validated end-to-end for
+an old-to-new Homebrew upgrade on native macOS, so it is not a verified fix
+for the running-guard issue.
+
+If using this workaround, plan for a broker interruption and loss of its
+in-process active selection. Keep the Homebrew package installed, remain in
+user mode, and reselect the intended upstream profile after setup:
+
+```sh
+aws-metadata setup --mode user
+aws-metadata status
+aws-metadata diagnose
+aws-metadata use example-nonprod
+```
+
+Setup does not remove the saved auto-clear duration. Check it with
+`aws-metadata auto-clear status`, then repeat
+[provider-isolated verification](verification.md#4-metadata-credential-path).
+Do not infer guard-version validation from these health checks alone.
+
+### System mode
 
 System mode copies a root-owned payload outside Homebrew, so refresh that layer
 after every package upgrade:
 
 ```sh
 aws-metadata setup --mode system
+aws-metadata version
+aws-metadata status
+aws-metadata diagnose
 ```
 
 Rerunning either explicit setup mode remains supported for repair or
-reinstallation.
+reinstallation. For user mode, distinguish that installer behavior from the
+native upgrade validation still needed above.
 
 ## Direct release upgrade
 
-Download and inspect the current `install-release.sh`, then rerun it with an
-explicit target version:
+This is a system-mode path. It is not a replacement for user mode's stable
+package-managed command. Download and inspect the current `install-release.sh`,
+then rerun it with an explicit target version:
 
 ```sh
 less install-release.sh
@@ -90,7 +126,8 @@ and argument contract.
 
 ## Source installation upgrade
 
-Use an exact release tag and inspect the diff or release notes before rerunning
+For a source-owned system-mode installation, use an exact release tag and
+inspect the diff or release notes before rerunning
 the installer:
 
 ```sh
@@ -126,8 +163,13 @@ aws-metadata use example-nonprod
    reinstall is supported and repairs service payloads and definitions.
 3. If the endpoint answers but authentication fails, use
    `aws-metadata errors`; do not mistake a broker error for a failed install.
-4. If clean removal is necessary, use the current method's uninstaller before
-   attempting a different installation method.
+4. Before clean removal, confirm that a compatible replacement is available
+   for the same mode and that you can recover the current version. User-mode
+   readers should keep the Homebrew package installed and review the
+   [rollback limitation](#homebrew-managed-user-mode) before removing any
+   working service or command.
+5. If a supported ownership transition requires removal, use the current
+   method's matching uninstaller before attempting the replacement method.
 
 Do not manually remove isolated root-owned files or service definitions unless
 the matching uninstaller is unavailable and the complete layout has been
@@ -139,15 +181,38 @@ package ownership inconsistent.
 There is no automatic rollback. Confirm target compatibility in the release
 notes before changing versions.
 
-### Homebrew-managed installation
+### Homebrew-managed user mode
+
+User mode requires a stable package-managed `aws-metadata` command. Removing
+Homebrew's package and then using the direct/source system installer does not
+provide an equivalent no-sudo rollback. Do not uninstall a working user-mode
+service or package before confirming a compatible package-managed replacement
+and a tested recovery path.
 
 The tap publishes the current supported formula rather than a catalog of every
-historical version. A rollback therefore changes ownership temporarily from
-Homebrew to a tagged direct/source installation:
+historical version. No package-preserving historical user-mode rollback
+procedure has been validated and documented here. Until one has been tested on
+macOS, keep the current package and its recovery information available; do not
+substitute a source installation, elevate privileges, or silently switch to
+system mode on a managed workstation.
+
+A future rollback procedure must verify the historical package, stable command
+and service paths, default process provider, restart behavior, version
+reporting, and return to the current supported Homebrew package before it can
+be recommended. For a broken setup on the current package, try the matching
+`aws-metadata setup --mode user` repair described above instead of removing
+the package first.
+
+### Homebrew-managed system mode
+
+The tap publishes the current supported formula rather than a catalog of every
+historical version. If the reviewed older release supports your system-mode
+host, schema, and layout, a rollback can temporarily change ownership from
+Homebrew to that tagged direct/source installation. Have the verified target
+installer and a recovery path available before removal:
 
 ```sh
-aws-metadata uninstall --mode user
-# or: aws-metadata uninstall --mode system
+aws-metadata uninstall --mode system
 brew uninstall aws-metadata-agent
 ```
 
@@ -158,8 +223,7 @@ To return to Homebrew, run the older release's `./uninstall.sh`, then:
 
 ```sh
 brew install aws-metadata-agent
-aws-metadata setup --mode user
-# or: aws-metadata setup --mode system
+aws-metadata setup --mode system
 ```
 
 Do not leave both source-owned `/usr/local/bin/aws-metadata` and a
@@ -167,7 +231,7 @@ package-managed command as competing installations. Setup contains migration
 handling for the known legacy source path, but installation ownership should
 remain explicit.
 
-### Direct or source installation
+### Direct or source system-mode installation
 
 If the earlier release uses a compatible schema and layout, install that exact
 tag with its verified helper or rerun its source installer. If the release
@@ -203,8 +267,10 @@ project-owned executables, native definitions, link-local state, and root-owned
 configuration. On Linux it restores the prior linger state when the project
 originally enabled lingering.
 
-User-owned AWS configuration, profile definitions, browser-authentication
-state, upstream credential caches, and unrelated scripts are preserved.
+User-mode removal stops its LaunchAgent and removes user-owned installer state
+and only its marked default process provider. Unrelated AWS settings, profile
+definitions, browser-authentication state, upstream credential caches, and
+unrelated scripts are preserved in both modes.
 
 ## Related documentation
 

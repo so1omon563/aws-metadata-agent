@@ -68,6 +68,13 @@ mode. Each command makes one AWS STS identity request.
 
 ### macOS user mode
 
+Run this as the user who completed setup. It explicitly selects the managed
+`$HOME/.aws/config`, overriding any inherited `AWS_CONFIG_FILE`, and removes
+the common competing credential sources. An alternate config file can select
+a different provider and would not verify the installed default process
+provider. IMDS fallback is disabled so a missing process provider cannot
+silently turn this into a system-mode check.
+
 ```sh
 env \
   -u AWS_PROFILE \
@@ -81,9 +88,16 @@ env \
   -u AWS_CONTAINER_CREDENTIALS_FULL_URI \
   -u AWS_CONTAINER_CREDENTIALS_RELATIVE_URI \
   -u AWS_EC2_METADATA_SERVICE_ENDPOINT \
+  AWS_CONFIG_FILE="$HOME/.aws/config" \
   AWS_SHARED_CREDENTIALS_FILE=/dev/null \
+  AWS_EC2_METADATA_DISABLED=true \
   aws sts get-caller-identity --region us-east-1
 ```
+
+With successful user-mode setup and the selected profile, this checks the
+managed default `credential_process` path. It does not prove that another
+application with different environment variables or an explicit profile uses
+the same provider.
 
 ### System mode
 

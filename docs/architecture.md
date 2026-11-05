@@ -86,7 +86,9 @@ The launchers do not inject credentials, mount AWS files, or require changes.
 
 ## Installed layout
 
-Common root-owned state:
+### System-mode payload and state
+
+These root-owned paths belong to system mode only:
 
 | Path | Purpose |
 | --- | --- |
@@ -101,10 +103,24 @@ The configuration file is root-owned mode `0644` because the user broker must
 read it. It contains no AWS profiles, credentials, passwords, tokens, or
 browser state.
 
-A source/direct installation owns `/usr/local/bin/aws-metadata`. A Homebrew
-installation keeps the command under the Homebrew prefix and uses the same
-root-owned service layout without transferring package-command ownership to
-the installer.
+A source/direct system installation owns `/usr/local/bin/aws-metadata`. A
+Homebrew system installation keeps the command under the Homebrew prefix and
+uses the same root-owned service layout without transferring package-command
+ownership to the installer.
+
+### macOS user-mode payload and state
+
+User mode uses Homebrew's package payload and stable `opt` paths instead of
+the root-owned layout above. Installer state, the `user-mode` marker, and the
+recorded `aws-runas-path` live under
+`~/Library/Application Support/aws-metadata-agent`; the directory is mode
+`0700` and those files are mode `0600`. Setup also manages its marked default
+process-provider block in `~/.aws/config`. The selected upstream executable
+is used in place, not copied into `/usr/local/libexec`.
+
+See the [user-mode topology](#macos-user-mode) and
+[lifecycle and ownership](user-mode.md#lifecycle-and-ownership) for the
+package, service, and AWS configuration boundaries.
 
 ### macOS services
 
@@ -133,7 +149,7 @@ state during uninstall when the project originally changed it.
 
 ## Startup order
 
-### macOS
+### macOS system mode
 
 1. The developer LaunchAgent starts the root-owned server wrapper in the GUI
    domain.
@@ -146,7 +162,17 @@ state during uninstall when the project originally changed it.
 5. For each accepted connection, launchd invokes the system `nc` executable as
    `nobody` to connect to the broker.
 
-### Linux
+### macOS user mode
+
+1. The developer LaunchAgent starts the package-managed server wrapper in the
+   GUI domain with user-owned installer configuration.
+2. The wrapper checks the uid and starts the recorded `aws-runas` executable
+   as an unprivileged ECS broker on `127.0.0.1:18080`, with the optional
+   auto-clear guard.
+3. Host consumers use the managed default process provider. No link-local
+   alias or forwarding service is installed.
+
+### Linux system mode
 
 1. systemd user lingering allows the developer user manager to start
    independently of a terminal or active login.
@@ -267,9 +293,10 @@ selection, not isolate credential consumers.
 
 | State | Restart | Reboot | Uninstall |
 | --- | --- | --- | --- |
-| Native service definitions and installed payload | Retained | Retained | Removed |
-| Link-local address and forwarding | Recreated | Recreated | Removed |
-| User AWS configuration | Retained | Retained | Preserved |
+| Native service definitions and installer-owned payload | Retained | Retained | Removed |
+| Homebrew-owned package | Retained | Retained | Retained until `brew uninstall` |
+| Link-local address and forwarding (system mode only) | Recreated | Recreated | Removed |
+| User AWS configuration | Retained | Retained | Preserved, except the user-mode owned process-provider block |
 | Upstream credential and browser caches | Retained, subject to expiration | Retained, subject to provider policy | Preserved |
 | Auto-clear preference | Retained | Retained | Removed |
 | Active profile | Cleared | Cleared | Not applicable |

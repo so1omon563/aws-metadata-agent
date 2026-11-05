@@ -51,11 +51,11 @@ aws-metadata diagnose
 aws-metadata status
 ```
 
-`diagnose` checks the link-local address and user broker independently. On
-macOS, complete forwarder errors are in
-`/var/log/aws-metadata-agent-forwarder.log`; broker errors are in
-`~/Library/Logs/aws-metadata-agent.log`. On Linux, inspect the system units and
-user broker separately:
+`diagnose` checks the mode-correct endpoint and user broker; system mode also
+checks the link-local address. On macOS, broker errors are in
+`~/Library/Logs/aws-metadata-agent.log`. System-mode forwarder errors are in
+`/var/log/aws-metadata-agent-forwarder.log`; user mode has no forwarder. On
+Linux, inspect the system units and user broker separately:
 
 ```sh
 systemctl status aws-metadata-agent-address.service aws-metadata-agent.socket \
@@ -100,17 +100,51 @@ aws-metadata use example-nonprod
 
 ## Profile not found or upstream profile fails
 
-List standard AWS configuration names and test upstream directly:
+List standard AWS configuration names locally:
 
 ```sh
 aws configure list-profiles
+```
+
+Then test the upstream executable used by the installed mode, as your normal
+user without `sudo`. For macOS user mode, use the path recorded during setup
+rather than assuming an executable on `PATH` is the same one:
+
+```sh
+(
+  state_dir="$HOME/Library/Application Support/aws-metadata-agent"
+  if [ ! -r "$state_dir/user-mode" ] ||
+     [ ! -r "$state_dir/aws-runas-path" ]; then
+    printf '%s\n' 'User-mode executable path is unavailable; check setup.' >&2
+    exit 1
+  fi
+  aws_runas=$(cat "$state_dir/aws-runas-path") || exit 1
+  case "$aws_runas" in
+    /*) ;;
+    *) printf '%s\n' 'Expected an absolute executable path.' >&2; exit 1 ;;
+  esac
+  if [ ! -x "$aws_runas" ]; then
+    printf '%s\n' 'Configured aws-runas executable is unavailable.' >&2
+    exit 1
+  fi
+  "$aws_runas" -r example-nonprod /usr/bin/true
+  result=$?
+  printf 'exit=%s\n' "$result"
+  exit "$result"
+)
+```
+
+For system mode, test the protected installed copy:
+
+```sh
 /usr/local/libexec/aws-metadata-agent/aws-runas -r example-nonprod /usr/bin/true
 printf 'exit=%s\n' "$?"
 ```
 
-The installed root-owned copy still executes as the developer. If this direct
-command fails similarly, investigate the upstream profile, identity provider,
-or AWS STS exchange using the authoritative
+User mode uses the selected user-accessible executable and installs no
+root-owned copy. In system mode, the root-owned copy still executes as the
+developer. If the mode-correct direct command fails similarly, investigate the
+upstream profile, identity provider, or AWS STS exchange using the authoritative
 [aws-runas documentation](https://mmmorris1975.github.io/aws-runas/). Do not
 share `-v` or `-vv` output without reviewing and redacting it; upstream warns
 that verbose diagnostics may contain AWS credentials.

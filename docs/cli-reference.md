@@ -18,12 +18,20 @@ upstream `aws-runas` broker. Normal profile changes do not require `sudo`.
 | `errors` | Classify recent authentication failures safely. | Reads at most 200 broker log lines and prints redacted summaries for the last 10 matches. |
 | `logs` | Deliberately inspect the full live broker log. | Full logs may contain sensitive profile, identity, or credential data. |
 | `diagnose` | Check installation and service boundaries. | Tests the mode-correct endpoint, broker service, log location, and `aws-runas`; system mode also checks the link-local address. |
-| `version` | Identify the installed agent release. | Reads the root-owned installed `VERSION`. |
+| `version` | Identify the installed agent release. | Reads the packaged `VERSION` through Homebrew, or the root-owned service `VERSION` for direct/source installations. It does not query a running process. |
 | `setup` | Complete or refresh a Homebrew installation. | Package-only command; use explicit `--mode user` or `--mode system`. User mode never attempts elevation. |
 | `uninstall` | Remove service state for a Homebrew installation. | Package-only command; use the matching mode. User mode removes only its marked default process provider. |
 
 Source and direct-release users run `./install.sh` and `./uninstall.sh` from the
 reviewed matching release instead of the package-only commands.
+
+The Homebrew wrapper selects its packaged version file in both service modes.
+The unwrapped CLI defaults to
+`/usr/local/libexec/aws-metadata-agent/VERSION`; an explicit
+`AWS_METADATA_VERSION_FILE` overrides that path. An unreadable selected file
+is an error, not a fallback to another version. In particular, a new Homebrew
+version does not prove that an already-running broker or guard was restarted;
+see [Homebrew upgrade](upgrades.md#homebrew-upgrade).
 
 ## Interactive profile selection
 
