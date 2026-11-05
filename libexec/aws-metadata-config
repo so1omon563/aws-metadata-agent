@@ -8,6 +8,84 @@ readonly END_MARKER='# aws-metadata-agent user mode: end'
 readonly DEFAULT_HEADER='[default]'
 readonly DEFAULT_SECTION_RE='^[[:space:]]*[[]default[]][[:space:]]*([#;].*)?$'
 
+# AWS config maps literal default and shell-quoted named default sections to the
+# same profile. Keep this separate from shared-credentials section syntax.
+# Match botocore's RawConfigParser section names and shlex-based profile map
+# without adding Python to the installed helper's runtime dependencies.
+read -r -d '' DEFAULT_CONFIG_AWK <<'AWK' || true
+  function has_header(line) {
+    return line ~ /^[[:space:]]*\[.*\]/
+  }
+  function section_header(line, content, indent) {
+    # RawConfigParser checks continuation indentation before section syntax.
+    # A bracketed line inside a multiline option is still part of that value.
+    content = line
+    sub(/^[[:space:]]*/, "", content)
+    if (content == "" || content ~ /^[#;]/) return 0
+    indent = length(line) - length(content)
+    if (have_section && have_option && indent > option_indent) return 0
+    if (has_header(line)) {
+      boundary_indent = have_option ? option_indent : indent
+      option_indent = indent
+      have_section = 1
+      have_option = 0
+      return 1
+    }
+    option_indent = indent
+    if (have_section && content ~ /[=:]/) have_option = 1
+    return 0
+  }
+  function is_default(line, name, quote, escaped, started, token, count, second, i, char) {
+    if (!has_header(line)) return 0
+    name = line
+    sub(/^[[:space:]]*\[/, "", name)
+    sub(/\][^]]*$/, "", name)
+    if (name == "default") return 1
+    if (index(name, "profile") != 1) return 0
+
+    # Decode POSIX shlex words, including adjacent quotes and backslashes.
+    quote = ""
+    escaped = started = count = 0
+    token = second = ""
+    for (i = 1; i <= length(name); i++) {
+      char = substr(name, i, 1)
+      if (escaped) {
+        if (quote == "\"" && char != "\"" && char != "\\") token = token "\\"
+        token = token char
+        escaped = 0
+      } else if (quote == "\047") {
+        if (char == quote) quote = ""
+        else token = token char
+      } else if (char == "\\") {
+        escaped = started = 1
+      } else if (quote != "") {
+        if (char == quote) quote = ""
+        else token = token char
+      } else if (char == "\047" || char == "\"") {
+        quote = char
+        started = 1
+      } else if (char == " " || char == "\t" || char == "\r" || char == "\n") {
+        if (started) {
+          count++
+          if (count == 2) second = token
+          token = ""
+          started = 0
+        }
+      } else {
+        token = token char
+        started = 1
+      }
+    }
+    if (escaped || quote != "") return 0
+    if (started) {
+      count++
+      if (count == 2) second = token
+    }
+    return count == 2 && second == "default"
+  }
+AWK
+readonly DEFAULT_CONFIG_AWK
+
 fail() {
   printf 'aws-metadata-config: %s\n' "$1" >&2
   exit "${2:-1}"
@@ -68,21 +146,29 @@ insert_block() {
   local block=$2
   local output=$3
 
-  command awk -v block="$block" -v default_section="$DEFAULT_SECTION_RE" '
-    {
-      print
-      if (!inserted && $0 ~ default_section) {
-        while ((getline line < block) > 0) {
-          print line
-        }
-        close(block)
-        inserted = 1
+  # Append inside the section, rather than before indented user settings.
+  # Otherwise INI parsers fold those settings into credential_process.
+  command awk -v block="$block" "$DEFAULT_CONFIG_AWK"'
+    function emit_block(indent, line) {
+      while ((getline line < block) > 0) {
+        # Keep an indented following section from becoming a continuation of
+        # our command, without making our command a continuation itself.
+        if (line ~ /^credential_process/) printf "%*s", indent, ""
+        print line
       }
+      close(block)
+      inserted = 1
+    }
+    {
+      if (section_header($0)) {
+        if (in_default && !inserted) emit_block(boundary_indent)
+        in_default = is_default($0)
+      }
+      print
     }
     END {
-      if (!inserted) {
-        exit 2
-      }
+      if (in_default && !inserted) emit_block(have_option ? option_indent : 0)
+      if (!inserted) exit 2
     }
   ' "$input" >"$output" || fail 'unable to update the default AWS profile'
 }
@@ -119,34 +205,21 @@ remove_block() {
   ' "$input" >"$output" || fail 'owned AWS config block is malformed'
 }
 
-extract_block() {
-  local input=$1
-  local output=$2
-
-  command awk -v begin="$BEGIN_MARKER" -v end="$END_MARKER" '
-    {
-      line = $0
-      sub(/\r$/, "", line)
-    }
-    line == begin { copying = 1 }
-    copying { print }
-    line == end { copying = 0 }
-  ' "$input" >"$output"
-}
-
 default_section_count() {
   local input=$1
 
-  grep -Ec "$DEFAULT_SECTION_RE" "$input" 2>/dev/null ||
-    true
+  command awk "$DEFAULT_CONFIG_AWK"'
+    section_header($0) && is_default($0) { count++ }
+    END { print count + 0 }
+  ' "$input"
 }
 
 default_has_credential_settings() {
   local input=$1
 
-  command awk -v default_section="$DEFAULT_SECTION_RE" '
-    /^[[:space:]]*\[/ {
-      in_default = ($0 ~ default_section)
+  command awk "$DEFAULT_CONFIG_AWK"'
+    section_header($0) {
+      in_default = is_default($0)
       next
     }
     in_default {
@@ -189,7 +262,6 @@ default_credentials_has_settings() {
 }
 
 validate_add_target() {
-  block_state=missing
   default_state=missing
   base_path=''
   [[ -e $config_path ]] || return 0
@@ -197,14 +269,12 @@ validate_add_target() {
   begin_count=$(marker_count "$BEGIN_MARKER" "$config_path")
   end_count=$(marker_count "$END_MARKER" "$config_path")
   if [[ $begin_count -eq 0 && $end_count -eq 0 ]]; then
-    block_state=plain
     base_path=$config_path
   else
     if [[ $begin_count -ne 1 || $end_count -ne 1 ]]; then
       fail 'AWS config has incomplete or duplicate project ownership markers'
     fi
     remove_block "$config_path" "$base_file"
-    block_state=owned
     base_path=$base_file
   fi
 
@@ -290,12 +360,6 @@ if [[ $command_name == validate || $command_name == add ]]; then
     fi
   fi
   write_block "$block_file" "$command_path" "$line_ending"
-  if [[ $block_state == owned ]]; then
-    extract_block "$config_path" "$temp_dir/current-block"
-    if command cmp -s "$temp_dir/current-block" "$block_file"; then
-      exit 0
-    fi
-  fi
 
   if [[ $default_state == present ]]; then
     insert_block "$base_path" "$block_file" "$new_file"
@@ -311,7 +375,9 @@ if [[ $command_name == validate || $command_name == add ]]; then
     command cat "$block_file" >>"$new_file"
   fi
 
-  replace_contents "$config_path" "$new_file" "$backup_file"
+  if ! command cmp -s "$config_path" "$new_file"; then
+    replace_contents "$config_path" "$new_file" "$backup_file"
+  fi
   exit 0
 fi
 
