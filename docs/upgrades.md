@@ -32,11 +32,11 @@ Before upgrading or rolling back:
    verified.
 
 Installer configuration records agent and schema versions. It is user-owned
-in user mode and root-owned in system mode. The system-mode installer
-rejects a newer unsupported schema rather than silently rewriting it; user-mode
-setup does not perform that schema-compatibility check. A
-release that removes, renames, or reinterprets installer state must increment
-the schema and include a tested migration.
+in user mode and root-owned in system mode. Both modes reject newer unsupported
+or invalid schema values before changing configuration or service artifacts.
+Legacy state without a schema key is treated as schema 1. A release that
+removes, renames, or reinterprets installer state must increment the schema
+and include a tested migration.
 
 Upgrades preserve user-owned `~/.aws` configuration, upstream credential and
 browser caches, and unrelated personal scripts. User-mode setup owns only its
@@ -66,8 +66,14 @@ issue; this documentation does not fix it.
 
 The proposed maintenance workaround is to rerun explicit user-mode setup
 after the package upgrade. The current installer unloads and bootstraps the
-user LaunchAgent. It also migrates older versioned Cellar references to the
-stable package path. This sequence has not yet been validated end-to-end for
+user LaunchAgent. Credential-free tests with a synthetic package, an `opt`
+symlink switch, and mocked launchd verify that explicit setup starts the new
+payload while a symlink switch alone leaves the old process running. They also
+verify that setup preserves the saved auto-clear duration and the managed AWS
+configuration. These simulations do not exercise native launchd or Homebrew.
+
+Setup also migrates older versioned Cellar references to the stable package
+path. This sequence has not yet been validated end-to-end for
 an old-to-new Homebrew upgrade on native macOS, so it is not a verified fix
 for the running-guard issue.
 

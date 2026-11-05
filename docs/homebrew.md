@@ -200,9 +200,10 @@ service status does not prove that the guard is running the new code.
 
 See the [user-mode running-process caveat and proposed setup workaround](upgrades.md#macos-user-mode-running-process-caveat)
 before treating the upgrade as complete. That guide explains the interruption,
-profile reselection, older Cellar-path migration, and native macOS validation
-still needed. Automatic guard reload is an unresolved issue, not a feature
-provided by the stable path.
+profile reselection, saved auto-clear duration, older Cellar-path migration,
+and native macOS validation still needed. Synthetic restart tests cover the
+explicit setup sequence, not a native Homebrew upgrade. Automatic guard reload
+is an unresolved issue, not a feature provided by the stable path.
 
 System mode copies a root-owned payload outside Homebrew. Run
 `aws-metadata setup --mode system` after each package upgrade to refresh it.

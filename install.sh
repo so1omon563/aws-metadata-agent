@@ -171,6 +171,39 @@ wait_for_metadata_endpoint() {
   return 1
 }
 
+validate_config_schema() {
+  local config_file=$1 prior_config_version
+
+  [[ -e $config_file ]] || return 0
+  if [[ ! -r $config_file ]]; then
+    printf 'Cannot read existing configuration: %s\n' "$config_file" >&2
+    return 2
+  fi
+  # Do not source installer state: even unsupported state must remain inert.
+  # v0.1.0 omitted this key and is the schema-1 baseline. An explicitly empty
+  # value, unlike an absent key, is invalid.
+  prior_config_version=$(awk -F= '
+    $1 == "AWS_METADATA_CONFIG_VERSION" { print substr($0, index($0, "=") + 1); found=1 }
+    END { if (!found) print "1" }
+  ' "$config_file")
+  if [[ ! $prior_config_version =~ ^[0-9]+$ ]]; then
+    printf 'Existing configuration has an invalid schema version: %s\n' \
+      "$prior_config_version" >&2
+    return 2
+  fi
+  # Strip leading zeroes before comparing decimal values. Length comparison
+  # rejects arbitrarily large future versions without shell integer overflow.
+  while [[ ${#prior_config_version} -gt 1 && $prior_config_version == 0* ]]; do
+    prior_config_version=${prior_config_version#0}
+  done
+  if [[ ${#prior_config_version} -gt ${#CONFIG_SCHEMA_VERSION} ]] ||
+     ((10#$prior_config_version > CONFIG_SCHEMA_VERSION)); then
+    printf 'Configuration schema %s is newer than this installer supports (%s).\n' \
+      "$prior_config_version" "$CONFIG_SCHEMA_VERSION" >&2
+    return 2
+  fi
+}
+
 install_user_mode() {
   local state_dir config_file marker_file runas_file
   local agent_dir agent_file log_dir log_file aws_dir aws_config aws_credentials
@@ -205,6 +238,8 @@ install_user_mode() {
   aws_dir=$target_home/.aws
   aws_config=$aws_dir/config
   aws_credentials=$aws_dir/credentials
+
+  validate_config_schema "$config_file"
 
   "$PROJECT_DIR/libexec/aws-metadata-config" \
     validate "$aws_config" "$aws_credentials"
@@ -395,24 +430,7 @@ if ((EUID != 0)); then
   exec sudo "${sudo_args[@]}"
 fi
 
-if [[ -r /etc/aws-metadata-agent/config ]]; then
-  prior_config_version=$(awk -F= \
-    '$1 == "AWS_METADATA_CONFIG_VERSION" { print $2 }' \
-    /etc/aws-metadata-agent/config)
-  # v0.1.0 did not record a schema version and is the schema-1 baseline.
-  prior_config_version=${prior_config_version:-1}
-  if [[ ! $prior_config_version =~ ^[0-9]+$ ]]; then
-    printf 'Existing configuration has an invalid schema version: %s\n' \
-      "$prior_config_version" >&2
-    exit 2
-  fi
-  prior_config_version=$((10#$prior_config_version))
-  if ((prior_config_version > CONFIG_SCHEMA_VERSION)); then
-    printf 'Configuration schema %s is newer than this installer supports (%s).\n' \
-      "$prior_config_version" "$CONFIG_SCHEMA_VERSION" >&2
-    exit 2
-  fi
-fi
+validate_config_schema /etc/aws-metadata-agent/config
 
 # Preserve the pre-install linger state across upgrades so uninstall can undo
 # only the change originally made by this project.
